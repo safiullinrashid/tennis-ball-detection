@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tennis Ball Detection</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="glass-container">
+    <!-- Header -->
+    <div class="header">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M12 2 L12 22 M2 12 L22 12" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <h1>Tennis Ball Detection</h1>
+        </div>
+        <p class="subtitle">AI-powered tennis ball detection system</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="image">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="8.5" cy="9.5" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M22 14 L16 8 L4 20" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            Фото
+        </button>
+        <button class="tab-btn" data-tab="video">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <rect x="2" y="6" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M18 10 L22 8 L22 16 L18 14" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            Видео
+        </button>
+    </div>
+
+    <!-- Image Upload Tab -->
+    <div class="tab-content active" id="image-tab">
+        <div class="upload-area" id="imageUploadArea">
+            <input type="file" id="imageInput" accept="image/*" hidden>
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
+                <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="8.5" cy="9.5" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M22 14 L16 8 L4 20" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <p>Перетащите фото сюда или <span class="browse-link">выберите файл</span></p>
+            <small>Поддерживаются JPG, PNG, WEBP (макс. 10MB)</small>
+        </div>
+    </div>
+
+    <!-- Video Upload Tab -->
+    <div class="tab-content" id="video-tab">
+        <div class="upload-area" id="videoUploadArea">
+            <input type="file" id="videoInput" accept="video/*" hidden>
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
+                <rect x="2" y="6" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M18 10 L22 8 L22 16 L18 14" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <p>Перетащите видео сюда или <span class="browse-link">выберите файл</span></p>
+            <small>Поддерживаются MP4, MOV, AVI (макс. 100MB)</small>
+        </div>
+    </div>
+
+    <!-- Result Area -->
+    <div class="result-area" id="resultArea" style="display: none;">
+        <div class="result-header">
+            <h3>Результат детекции</h3>
+            <button class="close-btn" id="closeResult">×</button>
+        </div>
+        <div class="result-content">
+            <div class="media-container">
+                <img id="resultImage" style="display: none; max-width: 100%; border-radius: 12px;">
+                <video id="resultVideo" controls style="display: none; max-width: 100%; border-radius: 12px;"></video>
+            </div>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="ballCount">0</div>
+                    <div class="stat-label">Обнаружено мячей</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="confidence">0%</div>
+                    <div class="stat-label">Средняя уверенность</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+        <div class="spinner"></div>
+        <p>Анализ медиафайла...</p>
+        <small>Это может занять несколько секунд</small>
+    </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
