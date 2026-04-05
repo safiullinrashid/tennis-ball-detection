@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tennis Ball Detection</title>
+    <title>Tennis Ball Detection - 3D Trajectory</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,7 +18,7 @@
             </svg>
             <h1>Tennis Ball Detection</h1>
         </div>
-        <p class="subtitle">AI-powered tennis ball detection system</p>
+        <p class="subtitle">3D траектория мяча в настольном теннисе</p>
     </div>
 
     <!-- Tabs -->
@@ -31,12 +31,20 @@
             </svg>
             Фото
         </button>
-        <button class="tab-btn" data-tab="video">
+        <button class="tab-btn" data-tab="video2d">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                 <rect x="2" y="6" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
                 <path d="M18 10 L22 8 L22 16 L18 14" stroke="currentColor" stroke-width="1.5"/>
             </svg>
-            Видео
+            2D Видео
+        </button>
+        <button class="tab-btn" data-tab="video3d">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <rect x="2" y="6" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M18 10 L22 8 L22 16 L18 14" stroke="currentColor" stroke-width="1.5"/>
+                <rect x="4" y="8" width="12" height="8" rx="1" stroke="currentColor" stroke-width="1"/>
+            </svg>
+            3D Видео
         </button>
     </div>
 
@@ -54,16 +62,49 @@
         </div>
     </div>
 
-    <!-- Video Upload Tab -->
-    <div class="tab-content" id="video-tab">
-        <div class="upload-area" id="videoUploadArea">
-            <input type="file" id="videoInput" accept="video/*" hidden>
+    <!-- 2D Video Upload Tab -->
+    <div class="tab-content" id="video2d-tab">
+        <div class="upload-area" id="video2dUploadArea">
+            <input type="file" id="video2dInput" accept="video/*" hidden>
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
                 <rect x="2" y="6" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
                 <path d="M18 10 L22 8 L22 16 L18 14" stroke="currentColor" stroke-width="1.5"/>
             </svg>
             <p>Перетащите видео сюда или <span class="browse-link">выберите файл</span></p>
             <small>Поддерживаются MP4, MOV, AVI (макс. 100MB)</small>
+        </div>
+        <div class="info-panel">
+            <p>📊 2D трекинг: траектория мяча на кадрах с жёлтой линией</p>
+        </div>
+    </div>
+
+    <!-- 3D Video Upload Tab (Две камеры) -->
+    <div class="tab-content" id="video3d-tab">
+        <div class="upload-area" id="video3dTopArea">
+            <input type="file" id="video3dTopInput" accept="video/*" hidden>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                <rect x="2" y="6" width="20" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="8.5" cy="9.5" r="1.5" stroke="currentColor" stroke-width="1"/>
+            </svg>
+            <p>Камера СВЕРХУ (вид на стол)</p>
+            <small>MP4, MOV, AVI (макс. 100MB)</small>
+        </div>
+
+        <div class="upload-area" id="video3dSideArea">
+            <input type="file" id="video3dSideInput" accept="video/*" hidden>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                <rect x="2" y="6" width="20" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                <rect x="4" y="8" width="16" height="8" rx="1" stroke="currentColor" stroke-width="1"/>
+            </svg>
+            <p>Камера СБОКУ (вид сбоку)</p>
+            <small>MP4, MOV, AVI (макс. 100MB)</small>
+        </div>
+
+        <button id="process3dBtn" class="process-btn" disabled>🎯 Обработать 3D</button>
+
+        <div class="info-panel">
+            <p>🔧 Для 3D реконструкции необходима калибровка камер</p>
+            <button id="calibrateBtn" class="calibrate-btn">📐 Калибровка камер</button>
         </div>
     </div>
 
@@ -77,6 +118,7 @@
             <div class="media-container">
                 <img id="resultImage" style="display: none; max-width: 100%; border-radius: 12px;">
                 <video id="resultVideo" controls style="display: none; max-width: 100%; border-radius: 12px;"></video>
+                <div id="trajectoryInfo" class="trajectory-info" style="display: none;"></div>
             </div>
             <div class="stats">
                 <div class="stat-card">

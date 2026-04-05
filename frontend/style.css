@@ -1,277 +1,92 @@
-* {
+/* Добавь в конец файла */
+
+.info-panel {
+    margin-top: 20px;
+    padding: 12px 16px;
+    background: rgba(0, 212, 255, 0.1);
+    border-radius: 12px;
+    border-left: 3px solid #00d4ff;
+}
+
+.info-panel p {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 13px;
     margin: 0;
-    padding: 0;
-    box-sizing: border-box;
 }
 
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'SF Pro Text', 'SF Pro Display', sans-serif;
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-}
-
-.glass-container {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(20px);
-    border-radius: 32px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 40px;
-    max-width: 900px;
+.process-btn, .calibrate-btn {
     width: 100%;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-}
-
-.header {
-    text-align: center;
-    margin-bottom: 40px;
-}
-
-.logo {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    margin-bottom: 12px;
-}
-
-.logo svg {
-    color: #00d4ff;
-}
-
-.logo h1 {
-    font-size: 28px;
-    font-weight: 600;
-    background: linear-gradient(135deg, #fff 0%, #a0a0a0 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-.subtitle {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 14px;
-}
-
-.tabs {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 32px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 16px;
-    padding: 6px;
-}
-
-.tab-btn {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 12px 24px;
-    background: transparent;
+    margin-top: 16px;
+    padding: 14px;
+    background: linear-gradient(135deg, #00d4ff, #0099cc);
     border: none;
     border-radius: 12px;
-    color: rgba(255, 255, 255, 0.6);
+    color: white;
     font-size: 16px;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: transform 0.2s, opacity 0.2s;
 }
 
-.tab-btn svg {
-    width: 20px;
-    height: 20px;
+.process-btn:hover:not(:disabled), .calibrate-btn:hover {
+    transform: scale(1.02);
 }
 
-.tab-btn.active {
+.process-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.calibrate-btn {
     background: rgba(255, 255, 255, 0.1);
-    color: #00d4ff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    margin-top: 8px;
 }
 
-.tab-content {
-    display: none;
-    animation: fadeIn 0.5s ease;
-}
-
-.tab-content.active {
-    display: block;
-}
-
-.upload-area {
-    border: 2px dashed rgba(255, 255, 255, 0.2);
-    border-radius: 24px;
-    padding: 60px 20px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    background: rgba(255, 255, 255, 0.02);
-}
-
-.upload-area:hover {
-    border-color: #00d4ff;
-    background: rgba(0, 212, 255, 0.05);
-}
-
-.upload-area svg {
-    color: rgba(255, 255, 255, 0.4);
-    margin-bottom: 20px;
-}
-
-.upload-area p {
-    color: rgba(255, 255, 255, 0.8);
-    margin-bottom: 8px;
-}
-
-.browse-link {
-    color: #00d4ff;
-    cursor: pointer;
-    font-weight: 500;
-}
-
-.upload-area small {
-    color: rgba(255, 255, 255, 0.4);
+.trajectory-info {
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 12px;
+    padding: 12px;
+    margin-top: 12px;
+    font-family: monospace;
     font-size: 12px;
-}
-
-.result-area {
-    margin-top: 32px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 24px;
-    padding: 24px;
-    animation: slideUp 0.5s ease;
-}
-
-.result-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-}
-
-.result-header h3 {
-    color: white;
-    font-size: 18px;
-    font-weight: 500;
-}
-
-.close-btn {
-    background: rgba(255, 255, 255, 0.1);
-    border: none;
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 24px;
-    cursor: pointer;
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-}
-
-.close-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
-}
-
-.media-container {
-    margin-bottom: 20px;
-    text-align: center;
-}
-
-.stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-top: 20px;
-}
-
-.stat-card {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 16px;
-    padding: 16px;
-    text-align: center;
-}
-
-.stat-value {
-    font-size: 32px;
-    font-weight: 700;
     color: #00d4ff;
-    margin-bottom: 8px;
+    text-align: left;
 }
 
-.stat-label {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.loading-overlay {
+.calibration-modal {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(10px);
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 2000;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+}
+
+.calibration-content {
+    background: #1a1a2e;
+    border-radius: 24px;
+    padding: 24px;
+    max-width: 90%;
+    width: 500px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.calibration-content h3 {
     color: white;
+    margin-bottom: 16px;
 }
 
-.spinner {
-    width: 48px;
-    height: 48px;
-    border: 3px solid rgba(255, 255, 255, 0.3);
-    border-top-color: #00d4ff;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-bottom: 20px;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@media (max-width: 768px) {
-    .glass-container {
-        padding: 20px;
-    }
-
-    .logo h1 {
-        font-size: 20px;
-    }
-
-    .tab-btn {
-        padding: 8px 16px;
-        font-size: 14px;
-    }
-
-    .stats {
-        grid-template-columns: 1fr;
-    }
+.calibration-content input {
+    width: 100%;
+    padding: 10px;
+    margin: 8px 0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: white;
 }

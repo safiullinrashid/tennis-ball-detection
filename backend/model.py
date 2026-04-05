@@ -8,85 +8,123 @@ class TennisBallDetector:
     def __init__(self, model_path="models/best.pt"):
         self.model = YOLO(model_path)
 
-    def detect_image(self, image_bytes):
-        """Детекция на изображении"""
-
-        # Декодируем изображение
+    def detect_image(self, image_bytes, return_annotated=True):
+        """
+        Детекция на изображении
+        return_annotated: вернуть аннотированное изображение или только координаты
+        """
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        # 🔥 УЛУЧШЕНИЕ 1: увеличиваем разрешение
-        img_resized = cv2.resize(img, (1024, 1024))
+        h, w = img.shape[:2]
 
-        # 🔥 УЛУЧШЕНИЕ 2: снижаем confidence
+        # Для маленьких мячей - увеличиваем
+        scale = 1.5 if min(h, w) < 640 else 1.0
+        if scale > 1.0:
+            img_scaled = cv2.resize(img, (int(w*scale), int(h*scale)))
+        else:
+            img_scaled = img
+
+        # Обесцвечивание (убираем зависимость от цвета)
+        gray_img = cv2.cvtColor(img_scaled, cv2.COLOR_BGR2GRAY)
+        gray_img = cv2.cvtColor(gray_img, cv2.COLOR_GRAY2BGR)
+
+        # Детекция
         results = self.model(
-            img_resized,
-            conf=0.1,      # было 0.25
-            iou=0.5,
-            imgsz=1024
+            gray_img,
+            conf=0.05,
+            iou=0.3,
+            augment=True,
+            imgsz=1280,
+            verbose=False
         )
 
+        # Собираем детекции
         detections = []
-
         if len(results[0].boxes) > 0:
             boxes = results[0].boxes.xyxy.cpu().numpy()
             confs = results[0].boxes.conf.cpu().numpy()
 
+            # Коэффициенты масштабирования обратно
+            scale_x = w / img_scaled.shape[1]
+            scale_y = h / img_scaled.shape[0]
+
             for box, conf in zip(boxes, confs):
+                x1 = int(box[0] * scale_x)
+                y1 = int(box[1] * scale_y)
+                x2 = int(box[2] * scale_x)
+                y2 = int(box[3] * scale_y)
 
-                # 🔥 УЛУЧШЕНИЕ 3: фильтр по размеру (убираем шум)
-                x1, y1, x2, y2 = box
-                w = x2 - x1
-                h = y2 - y1
-
-                if w < 5 or h < 5:
+                if (x2 - x1) < 3 or (y2 - y1) < 3:
                     continue
 
                 detections.append({
-                    "bbox": box.tolist(),
+                    "bbox": [x1, y1, x2, y2],
+                    "center": [(x1 + x2) / 2, (y1 + y2) / 2],
+                    "width": x2 - x1,
+                    "height": y2 - y1,
                     "confidence": float(conf)
                 })
 
-        # Рисуем результат
-        result_img = results[0].plot()
+        # Аннотируем если нужно
+        if return_annotated:
+            result_img = img.copy()
+            for d in detections:
+                x1, y1, x2, y2 = d["bbox"]
+                conf = d["confidence"]
+                cv2.rectangle(result_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(result_img, f"ball {conf:.2f}", (x1, y1-5),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
-        _, buffer = cv2.imencode('.jpg', result_img)
-        result_bytes = buffer.tobytes()
+            _, buffer = cv2.imencode('.jpg', result_img, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            result_bytes = buffer.tobytes()
+            return detections, result_bytes
 
-        return detections, result_bytes
+        return detections
 
-    def detect_video(self, video_bytes):
-        """Детекция на видео"""
+    def detect_video_frame(self, frame, return_annotated=True):
+        """Детекция на одном кадре видео (для покадровой обработки)"""
+        h, w = frame.shape[:2]
 
-        temp_input = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-        temp_input.write(video_bytes)
-        temp_input.close()
+        scale = 1.5 if min(h, w) < 640 else 1.0
+        if scale > 1.0:
+            frame_scaled = cv2.resize(frame, (int(w*scale), int(h*scale)))
+        else:
+            frame_scaled = frame
 
-        temp_output = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-        temp_output.close()
+        gray_frame = cv2.cvtColor(frame_scaled, cv2.COLOR_BGR2GRAY)
+        gray_frame = cv2.cvtColor(gray_frame, cv2.COLOR_GRAY2BGR)
 
-        # 🔥 улучшенные параметры
-        results = self.model(
-            temp_input.name,
-            conf=0.1,
-            iou=0.5,
-            imgsz=1024,
-            save=True,
-            project='temp',
-            name='video_output'
-        )
+        results = self.model(gray_frame, conf=0.05, iou=0.3, augment=True, imgsz=1280, verbose=False)
 
-        processed_video = 'temp/video_output/result.mp4'
+        detections = []
+        if len(results[0].boxes) > 0:
+            boxes = results[0].boxes.xyxy.cpu().numpy()
+            confs = results[0].boxes.conf.cpu().numpy()
 
-        if os.path.exists(processed_video):
-            with open(processed_video, 'rb') as f:
-                video_result = f.read()
+            scale_x = w / frame_scaled.shape[1]
+            scale_y = h / frame_scaled.shape[0]
 
-            os.unlink(temp_input.name)
+            for box, conf in zip(boxes, confs):
+                x1 = int(box[0] * scale_x)
+                y1 = int(box[1] * scale_y)
+                x2 = int(box[2] * scale_x)
+                y2 = int(box[3] * scale_y)
 
-            import shutil
-            shutil.rmtree('temp', ignore_errors=True)
+                if (x2 - x1) < 3 or (y2 - y1) < 3:
+                    continue
 
-            return video_result
+                detections.append({
+                    "bbox": [x1, y1, x2, y2],
+                    "center": [(x1 + x2) / 2, (y1 + y2) / 2],
+                    "confidence": float(conf)
+                })
 
-        return None
+        if return_annotated:
+            result_frame = frame.copy()
+            for d in detections:
+                x1, y1, x2, y2 = d["bbox"]
+                cv2.rectangle(result_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            return detections, result_frame
+
+        return detections
