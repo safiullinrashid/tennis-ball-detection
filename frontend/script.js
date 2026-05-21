@@ -149,7 +149,7 @@ async function handleImageUpload(file) {
     }
 }
 
-// Обработка 2D видео (с трекингом)
+// Обработка 2D видео (с трекингом и принудительным скачиванием)
 async function handleVideo2dUpload(file) {
     if (!file.type.startsWith('video/')) {
         alert('Пожалуйста, выберите видео');
@@ -170,6 +170,15 @@ async function handleVideo2dUpload(file) {
             const blob = await response.blob();
             const url = URL.createObjectURL(blob);
 
+            // Скачивание файла
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'tracked_2d.mp4';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            // Показ в браузере
             resultVideo.src = url;
             resultVideo.style.display = 'block';
             resultImage.style.display = 'none';
@@ -179,7 +188,7 @@ async function handleVideo2dUpload(file) {
 
             if (trajectoryInfo) {
                 trajectoryInfo.style.display = 'block';
-                trajectoryInfo.innerHTML = '📈 Жёлтая линия — траектория движения мяча';
+                trajectoryInfo.innerHTML = '📥 Видео скачано на компьютер<br>📈 Жёлтая линия — траектория движения мяча';
             }
 
             resultArea.style.display = 'block';

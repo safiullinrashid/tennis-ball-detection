@@ -1,130 +1,119 @@
 from ultralytics import YOLO
 import cv2
 import numpy as np
-import tempfile
-import os
 
 class TennisBallDetector:
     def __init__(self, model_path="models/best.pt"):
         self.model = YOLO(model_path)
 
-    def detect_image(self, image_bytes, return_annotated=True):
+    def detect_video_frame(self, frame):
         """
-        Детекция на изображении
-        return_annotated: вернуть аннотированное изображение или только координаты
+        Детекция мяча с усилением для разных направлений
         """
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        h, w = img.shape[:2]
-
-        # Для маленьких мячей - увеличиваем
-        scale = 1.5 if min(h, w) < 640 else 1.0
-        if scale > 1.0:
-            img_scaled = cv2.resize(img, (int(w*scale), int(h*scale)))
-        else:
-            img_scaled = img
-
-        # Обесцвечивание (убираем зависимость от цвета)
-        gray_img = cv2.cvtColor(img_scaled, cv2.COLOR_BGR2GRAY)
-        gray_img = cv2.cvtColor(gray_img, cv2.COLOR_GRAY2BGR)
-
-        # Детекция
-        results = self.model(
-            gray_img,
-            conf=0.05,
-            iou=0.3,
-            augment=True,
-            imgsz=1280,
-            verbose=False
-        )
-
-        # Собираем детекции
-        detections = []
-        if len(results[0].boxes) > 0:
-            boxes = results[0].boxes.xyxy.cpu().numpy()
-            confs = results[0].boxes.conf.cpu().numpy()
-
-            # Коэффициенты масштабирования обратно
-            scale_x = w / img_scaled.shape[1]
-            scale_y = h / img_scaled.shape[0]
-
-            for box, conf in zip(boxes, confs):
-                x1 = int(box[0] * scale_x)
-                y1 = int(box[1] * scale_y)
-                x2 = int(box[2] * scale_x)
-                y2 = int(box[3] * scale_y)
-
-                if (x2 - x1) < 3 or (y2 - y1) < 3:
-                    continue
-
-                detections.append({
-                    "bbox": [x1, y1, x2, y2],
-                    "center": [(x1 + x2) / 2, (y1 + y2) / 2],
-                    "width": x2 - x1,
-                    "height": y2 - y1,
-                    "confidence": float(conf)
-                })
-
-        # Аннотируем если нужно
-        if return_annotated:
-            result_img = img.copy()
-            for d in detections:
-                x1, y1, x2, y2 = d["bbox"]
-                conf = d["confidence"]
-                cv2.rectangle(result_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(result_img, f"ball {conf:.2f}", (x1, y1-5),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-
-            _, buffer = cv2.imencode('.jpg', result_img, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            result_bytes = buffer.tobytes()
-            return detections, result_bytes
-
-        return detections
-
-    def detect_video_frame(self, frame, return_annotated=True):
-        """Детекция на одном кадре видео (для покадровой обработки)"""
         h, w = frame.shape[:2]
 
-        scale = 1.5 if min(h, w) < 640 else 1.0
-        if scale > 1.0:
-            frame_scaled = cv2.resize(frame, (int(w*scale), int(h*scale)))
-        else:
-            frame_scaled = frame
+        # 1. Повышаем контрастность
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        l = clahe.apply(l)
+        lab = cv2.merge((l, a, b))
+        enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
-        gray_frame = cv2.cvtColor(frame_scaled, cv2.COLOR_BGR2GRAY)
-        gray_frame = cv2.cvtColor(gray_frame, cv2.COLOR_GRAY2BGR)
+        # 2. Цветовой фильтр (оранжевый диапазон)
+        hsv = cv2.cvtColor(enhanced, cv2.COLOR_BGR2HSV)
+        lower_orange = np.array([5, 80, 80])
+        upper_orange = np.array([20, 255, 255])
+        mask = cv2.inRange(hsv, lower_orange, upper_orange)
 
-        results = self.model(gray_frame, conf=0.05, iou=0.3, augment=True, imgsz=1280, verbose=False)
+        # 3. Применяем маску
+        filtered = cv2.bitwise_and(enhanced, enhanced, mask=mask)
 
-        detections = []
-        if len(results[0].boxes) > 0:
-            boxes = results[0].boxes.xyxy.cpu().numpy()
-            confs = results[0].boxes.conf.cpu().numpy()
+        # 4. Детекция на оригинале + на фильтрованном
+        results_orig = self.model(
+            frame,
+            conf=0.05,
+            iou=0.3,
+            augment=True,      # важно для разных ракурсов
+            verbose=False,
+            max_det=1
+        )
 
-            scale_x = w / frame_scaled.shape[1]
-            scale_y = h / frame_scaled.shape[0]
+        results_filtered = self.model(
+            filtered,
+            conf=0.03,          # ещё ниже для фильтрованного
+            iou=0.3,
+            augment=True,
+            verbose=False,
+            max_det=1          # <-- ИЗМЕНЕНО: было 3, стало 1
+        )
 
+        # Объединяем детекции
+        all_detections = []
+
+        # Добавляем детекции из оригинального кадра
+        if len(results_orig[0].boxes) > 0:
+            boxes = results_orig[0].boxes.xyxy.cpu().numpy()
+            confs = results_orig[0].boxes.conf.cpu().numpy()
             for box, conf in zip(boxes, confs):
-                x1 = int(box[0] * scale_x)
-                y1 = int(box[1] * scale_y)
-                x2 = int(box[2] * scale_x)
-                y2 = int(box[3] * scale_y)
-
-                if (x2 - x1) < 3 or (y2 - y1) < 3:
+                x1, y1, x2, y2 = [int(v) for v in box]
+                box_w = x2 - x1      # <-- ДОБАВЛЕНО
+                box_h = y2 - y1      # <-- ДОБАВЛЕНО
+                
+                # <-- ДОБАВЛЕНО: фильтр по размеру
+                if box_w < 10 or box_w > 60:
                     continue
+                if box_h < 10 or box_h > 60:
+                    continue
+                # <-- КОНЕЦ ФИЛЬТРА
+                
+                if (x2 - x1) > 8 and (y2 - y1) > 8:  # отсекаем шум
+                    all_detections.append({
+                        "bbox": [x1, y1, x2, y2],
+                        "center": [(x1 + x2) / 2, (y1 + y2) / 2],
+                        "confidence": float(conf),
+                        "source": "original"
+                    })
 
-                detections.append({
-                    "bbox": [x1, y1, x2, y2],
-                    "center": [(x1 + x2) / 2, (y1 + y2) / 2],
-                    "confidence": float(conf)
-                })
+        # Добавляем детекции из фильтрованного кадра
+        if len(results_filtered[0].boxes) > 0:
+            boxes = results_filtered[0].boxes.xyxy.cpu().numpy()
+            confs = results_filtered[0].boxes.conf.cpu().numpy()
+            for box, conf in zip(boxes, confs):
+                x1, y1, x2, y2 = [int(v) for v in box]
+                box_w = x2 - x1      # <-- ДОБАВЛЕНО
+                box_h = y2 - y1      # <-- ДОБАВЛЕНО
+                
+                # <-- ДОБАВЛЕНО: фильтр по размеру
+                if box_w < 5 or box_w > 15:
+                    continue
+                if box_h < 5 or box_h > 15:
+                    continue
+                # <-- КОНЕЦ ФИЛЬТРА
+                
+                if (x2 - x1) > 8 and (y2 - y1) > 8:
+                    all_detections.append({
+                        "bbox": [x1, y1, x2, y2],
+                        "center": [(x1 + x2) / 2, (y1 + y2) / 2],
+                        "confidence": float(conf) + 0.05,  # бонус к уверенности
+                        "source": "filtered"
+                    })
 
-        if return_annotated:
-            result_frame = frame.copy()
-            for d in detections:
-                x1, y1, x2, y2 = d["bbox"]
-                cv2.rectangle(result_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            return detections, result_frame
+        # Удаляем дубликаты (по IoU)
+        unique_detections = []
+        for d in all_detections:
+            is_duplicate = False
+            x1, y1, x2, y2 = d['bbox']
+            for u in unique_detections:
+                ux1, uy1, ux2, uy2 = u['bbox']
+                # Проверяем перекрытие
+                if abs(x1 - ux1) < 20 and abs(y1 - uy1) < 20:
+                    is_duplicate = True
+                    break
+            if not is_duplicate:
+                unique_detections.append(d)
 
-        return detections
+        # Сортируем по уверенности
+        unique_detections.sort(key=lambda d: d['confidence'], reverse=True)
+
+        return unique_detections[:1]  # <-- ИЗМЕНЕНО: было 3, стало 1 (максимум 1 мяч)
