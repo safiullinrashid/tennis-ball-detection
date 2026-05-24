@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
-from backend.model import TennisBallDetector, TableDetector
+from backend.model import TennisBallDetector, TableDetector, TABLE_H, COURT_W, COURT_H, NET_H
 from backend.tracker_2d import BallTracker2D
 from backend.tracker_3d import BallTracker3D
 import io
@@ -38,9 +38,13 @@ def detect_image():
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        results = detector.model(img, conf=0.25, iou=0.1, max_det=5)
-        result_img = results[0].plot()
-        _, buffer = cv2.imencode('.jpg', result_img)
+        detections = detector.detect_video_frame(img)
+        for d in detections:
+            x1, y1, x2, y2 = d['bbox']
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cx, cy = [int(v) for v in d['center']]
+            cv2.circle(img, (cx, cy), 4, (0, 0, 255), -1)
+        _, buffer = cv2.imencode('.jpg', img)
 
         return send_file(io.BytesIO(buffer.tobytes()), mimetype='image/jpeg')
     except Exception as e:
@@ -77,18 +81,26 @@ def _draw_trajectory_png(points, output_path, bgr_color, is_side=False):
     points: список {frame, x, y} — координаты в см.
     Разрывы >5 кадров = новая линия.
     """
-    COURT_W, COURT_H, TABLE_H, NET_H = 274.0, 152.5, 76.0, 15.25
-
     if not points or len(points) < 2:
         img = np.zeros((400, 800, 3), dtype=np.uint8)
         cv2.imencode('.png', img)[1].tofile(output_path)
         return
 
     if is_side:
-        # Сбоку: фиксированный диапазон 0–114 см (TABLE_H * 1.5)
-        min_y, max_y = 0.0, TABLE_H * 1.5
-        min_x, max_x = 0.0, COURT_W
-        img_w, img_h = 800, max(400, int(800 / (COURT_W / (TABLE_H * 1.5))))
+        xs = [p['x'] for p in points]
+        ys = [p['y'] for p in points]
+        min_x, max_x = min(min(xs), 0), max(max(xs), COURT_W)
+        min_y = min(min(ys), 0)
+        max_y = max(max(ys), TABLE_H * 2.0)
+        rx, ry = max_x - min_x, max_y - min_y
+        if rx < 1: rx = COURT_W
+        if ry < 1: ry = TABLE_H * 2.0
+        pad_ratio = 0.08
+        min_x -= rx * pad_ratio
+        max_x += rx * pad_ratio
+        min_y -= ry * pad_ratio
+        max_y += ry * pad_ratio
+        img_w, img_h = 800, max(400, int(800 / (rx / ry)))
     else:
         xs = [p['x'] for p in points]
         ys = [p['y'] for p in points]
@@ -106,7 +118,7 @@ def _draw_trajectory_png(points, output_path, bgr_color, is_side=False):
         img_w, img_h = 800, int(800 / (COURT_W / COURT_H))
 
     img = np.zeros((img_h, img_w, 3), dtype=np.uint8)
-    pad = 20
+    pad = 40 if is_side else 20
     tx, ty = pad, pad
     tw, th = img_w - pad * 2, img_h - pad * 2
 
@@ -125,7 +137,13 @@ def _draw_trajectory_png(points, output_path, bgr_color, is_side=False):
         cv2.line(img, (t_left, ts_y), (t_right, ts_y), (0, 180, 0), 2)
         cv2.line(img, (t_left, ts_y + 1), (t_right, ts_y + 1), (0, 100, 0), 1)
         net_x = table_to_img(tx, ty, tw, th, COURT_W * 0.5, min_x, max_x, True)
-        cv2.line(img, (net_x, ty), (net_x, ty + th), (100, 100, 100), 2)
+        net_top = table_to_img(tx, ty, tw, th, TABLE_H + NET_H, min_y, max_y, False)
+        net_bot = table_to_img(tx, ty, tw, th, TABLE_H, min_y, max_y, False)
+        cv2.line(img, (net_x, net_top), (net_x, net_bot), (100, 100, 100), 2)
+        # Верхняя перекладина сетки — показывает, что сетка идёт в глубину (по ширине стола)
+        net_left = table_to_img(tx, ty, tw, th, COURT_W * 0.5 - 40, min_x, max_x, True)
+        net_right = table_to_img(tx, ty, tw, th, COURT_W * 0.5 + 40, min_x, max_x, True)
+        cv2.line(img, (net_left, net_top), (net_right, net_top), (120, 120, 120), 1)
         # Пол
         fl_y = table_to_img(tx, ty, tw, th, 0, min_y, max_y, False)
         if ty < fl_y < ty + th:
@@ -139,8 +157,8 @@ def _draw_trajectory_png(points, output_path, bgr_color, is_side=False):
         net_x = table_to_img(tx, ty, tw, th, COURT_W * 0.5, min_x, max_x, True)
         cv2.line(img, (net_x, t_top), (net_x, t_bottom), (100, 100, 100), 2)
 
-    def norm_x(v): return table_to_img(tx, ty, tw, th, v, min_x, max_x, True)
-    def norm_y(v): return table_to_img(tx, ty, tw, th, v, min_y, max_y, False)
+    def norm_x(v): return max(0, min(img_w-1, table_to_img(tx, ty, tw, th, v, min_x, max_x, True)))
+    def norm_y(v): return max(0, min(img_h-1, table_to_img(tx, ty, tw, th, v, min_y, max_y, False)))
 
     prev_frame = None
     gap_threshold = 5
@@ -365,9 +383,9 @@ def track_3d():
                         else:
                             print(f"  {label}: поверхность стола не найдена")
                 d = detector.detect_video_frame(frame)
+                tracker_.update(d, h)
                 if d:
                     dets_[n] = d[0]['center']
-                tracker_.update(d, h)
                 frame = tracker_.draw_detections(frame, d, (0, 255, 0), 2)
                 frame = tracker_.draw_trajectory(frame, (0, 255, 255), 2)
                 all_frames.append(frame)
@@ -402,7 +420,7 @@ def track_3d():
         side_keys = sorted(side_dets.keys())
         used_side = set()
         matched_pairs = []
-        tolerance = 5
+        tolerance = 10
         for tf in sorted(top_dets.keys()):
             best = None
             best_dist = 999
@@ -467,6 +485,13 @@ def track_3d():
             sx_s = [p['x'] for p in side_table_coords]
             sy_s = [p['y'] for p in side_table_coords]
             print(f"  PNG бок: X={min(sx_s):.0f}–{max(sx_s):.0f} Y={min(sy_s):.0f}–{max(sy_s):.0f} ({len(side_table_coords)} точек)")
+            # Сдвиг высоты — так же, как в tracker_3d.get_trajectory_3d
+            min_y_side = min(sy_s)
+            side_shift = TABLE_H - min_y_side
+            if abs(side_shift) > 2:
+                for p in side_table_coords:
+                    p['y'] = round(p['y'] + side_shift, 1)
+                print(f"  PNG бок сдвиг Y: min={min_y_side:.0f} → shift={side_shift:.0f}")
 
         # Генерируем изображения траекторий на фоне стола
         top_png = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_top_traj.png')

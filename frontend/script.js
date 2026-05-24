@@ -393,6 +393,8 @@ function initScene3d(points) {
             <button id="playBtn3d" style="background: none; border: none; color: #fff; cursor: pointer; font-size: 18px;">▶</button>
             <input type="range" id="scrubber3d" min="0" max="1" step="0.001" style="width: 200px; accent-color: #00d4ff;">
             <span id="frameInfo3d" style="color: #aaa; font-size: 12px; min-width: 60px;">0/0</span>
+            <span style="color:#888;font-size:11px;">скорость</span>
+            <input type="range" id="speed3d" min="1" max="10" value="4" step="1" style="width:60px;accent-color:#ff8800;">
         </div>`;
         renderer3d = null;
     }
@@ -478,7 +480,7 @@ function initScene3d(points) {
 
     // Траектория
     if (points.length > 1) {
-        const pts = points.map(p => new THREE.Vector3(p.X, p.Z, p.Y));
+        const pts = points.map(p => new THREE.Vector3(p.X, p.Z - 76 + 4, 152.5 - p.Y));
         const trajGeo = new THREE.BufferGeometry().setFromPoints(pts);
         trajGeo.setAttribute('color', new THREE.Float32BufferAttribute(
             points.map((_, i) => {
@@ -494,7 +496,7 @@ function initScene3d(points) {
     // Точки траектории
     if (points.length > 0) {
         const dotGeo = new THREE.BufferGeometry();
-        const positions = points.map(p => [p.X, p.Z, p.Y]).flat();
+        const positions = points.map(p => [p.X, p.Z - 76 + 4, 152.5 - p.Y]).flat();
         dotGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
         const dotMat = new THREE.PointsMaterial({
             color: 0xffaa00,
@@ -507,10 +509,10 @@ function initScene3d(points) {
 
     // Мяч
     const ballGeo = new THREE.SphereGeometry(3.5, 16, 16);
-    const ballMat = new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x00ff88, emissiveIntensity: 0.5 });
+    const ballMat = new THREE.MeshStandardMaterial({ color: 0xff8800, emissive: 0xff4400, emissiveIntensity: 0.4 });
     ballMesh = new THREE.Mesh(ballGeo, ballMat);
     if (points.length > 0) {
-        ballMesh.position.set(points[0].X, points[0].Z, points[0].Y);
+        ballMesh.position.set(points[0].X, points[0].Z - 76 + 4, 152.5 - points[0].Y);
     }
     scene3d.add(ballMesh);
 
@@ -525,7 +527,7 @@ function initScene3d(points) {
     });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
-    floor.position.set(137, -38, 76);
+    floor.position.set(137, -76, 76);
     scene3d.add(floor);
 
     // Управление
@@ -563,13 +565,15 @@ function initScene3d(points) {
         renderer3d.setSize(cw, ch);
     });
 
-    // Запускаем рендер-цикл (половинная скорость)
+    // Запускаем рендер-цикл
     let speedCounter = 0;
     function renderLoop() {
         if (!renderer3d || !scene3d || !camera3d) return;
         if (isPlaying) {
             speedCounter++;
-            if (speedCounter % 2 === 0 && animFrame < points.length - 1) {
+            const speedEl = document.getElementById('speed3d');
+            const step = speedEl ? parseInt(speedEl.value) : 2;
+            if (speedCounter % step === 0 && animFrame < points.length - 1) {
                 animFrame++;
                 updateBallPosition(animFrame);
             }
@@ -589,7 +593,7 @@ function updateBallPosition(idx) {
     if (!ballMesh || points3d.length === 0) return;
     idx = Math.min(idx, points3d.length - 1);
     const p = points3d[idx];
-    ballMesh.position.set(p.X, p.Z, p.Y);
+    ballMesh.position.set(p.X, p.Z - 76 + 4, 152.5 - p.Y);
     document.getElementById('scrubber3d').value = idx;
     document.getElementById('frameInfo3d').textContent = `${idx + 1}/${points3d.length}`;
 }

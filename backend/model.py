@@ -1,4 +1,3 @@
-import random
 from ultralytics import YOLO
 import cv2
 import numpy as np
@@ -17,7 +16,7 @@ class TennisBallDetector:
         mask = cv2.inRange(hsv, np.array([5, 80, 80]), np.array([20, 255, 255]))
         filtered = cv2.bitwise_and(frame, frame, mask=mask)
 
-        results = self.model(filtered, conf=0.15, iou=0.3, augment=False, verbose=False, max_det=3)
+        results = self.model(filtered, conf=0.03, iou=0.3, augment=False, verbose=False, max_det=5)
 
         detections = []
         if len(results[0].boxes) > 0:
@@ -26,9 +25,7 @@ class TennisBallDetector:
             for box, conf in zip(boxes, confs):
                 x1, y1, x2, y2 = [int(v) for v in box]
                 bw, bh = x2 - x1, y2 - y1
-                if bw < 6 or bw > 50 or bh < 6 or bh > 50:
-                    continue
-                if max(bw, bh) / max(min(bw, bh), 1) > 2.5:
+                if bw < 8 or bw > 60 or bh < 8 or bh > 60:
                     continue
                 detections.append({
                     "bbox": [x1, y1, x2, y2],
@@ -44,8 +41,6 @@ class TableDetector:
         self.hsv_upper = np.array([135, 255, 255])
 
     def detect_bounds(self, frame):
-        """Находит bounding box стола по синему цвету.
-        Возвращает (x, y, w, h) в пикселях или None."""
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, self.hsv_lower, self.hsv_upper)
         kernel = np.ones((7, 7), np.uint8)
@@ -62,14 +57,11 @@ class TableDetector:
         return cv2.boundingRect(largest)
 
     def detect_surface_row(self, frame):
-        """Для боковой камеры: находит строку с макс. синих пикселей
-        (поверхность стола). Возвращает int или None."""
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, self.hsv_lower, self.hsv_upper)
         blue_per_row = np.sum(mask > 0, axis=1)
         if np.max(blue_per_row) < 10:
             return None
-        # Сглаживание скользящим средним
         kernel = np.ones(11) / 11
         smooth = np.convolve(blue_per_row.astype(float), kernel, mode='same')
         return int(np.argmax(smooth))

@@ -77,8 +77,7 @@ class BallTracker3D:
             zs = [p['Z'] for p in self.trajectory_3d]
             min_z = min(zs)
             shift = TABLE_H - min_z
-            if abs(shift) > 1:
-                print(f"  Коррекция Z: min={min_z:.0f} → shift={shift:.0f} до TABLE_H={TABLE_H}")
+            if abs(shift) > 2:
                 for p in self.trajectory_3d:
-                    p['Z'] = max(0, round(p['Z'] + shift, 1))
+                    p['Z'] = round(p['Z'] + shift, 1)
         return self.trajectory_3d
