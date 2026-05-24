@@ -420,3 +420,49 @@ body {
         padding: 20px;
     }
 }
+
+#viewer3d canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+#controls3d button:hover {
+    color: #00d4ff;
+}
+
+#scrubber3d {
+    cursor: pointer;
+}
+
+#scrubber3d::-webkit-slider-runnable-track {
+    height: 4px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 2px;
+}
+
+#scrubber3d::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 14px;
+    width: 14px;
+    border-radius: 50%;
+    background: #00d4ff;
+    margin-top: -5px;
+    cursor: pointer;
+}
+
+#scrubber3d::-moz-range-track {
+    height: 4px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 2px;
+    border: none;
+}
+
+#scrubber3d::-moz-range-thumb {
+    height: 14px;
+    width: 14px;
+    border-radius: 50%;
+    background: #00d4ff;
+    border: none;
+    cursor: pointer;
+}

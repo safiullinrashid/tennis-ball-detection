@@ -117,8 +117,26 @@
         <div class="result-content">
             <div class="media-container">
                 <img id="resultImage" style="display: none; max-width: 100%; border-radius: 12px;">
-                <video id="resultVideo" controls style="display: none; max-width: 100%; border-radius: 12px;"></video>
+                <video id="resultVideo" controls autoplay muted playsinline style="display: none; max-width: 100%; border-radius: 12px;"></video>
+                <div id="viewer3d" style="display: none; width: 100%; height: 480px; border-radius: 12px; overflow: hidden; position: relative; background: #1a1a2e;">
+                    <div id="controls3d" style="position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 8px; z-index: 10;">
+                        <button id="playBtn3d" style="background: none; border: none; color: #fff; cursor: pointer; font-size: 18px;">▶</button>
+                        <input type="range" id="scrubber3d" min="0" max="1" step="0.001" style="width: 200px; accent-color: #00d4ff;">
+                        <span id="frameInfo3d" style="color: #aaa; font-size: 12px; min-width: 60px;">0/0</span>
+                    </div>
+                </div>
                 <div id="trajectoryInfo" class="trajectory-info" style="display: none;"></div>
+                <div id="tracks3d_container" style="display: none; gap: 12px; margin-top: 16px; flex-wrap: wrap;">
+                    <div style="flex: 1; background: rgba(0,0,0,0.3); border-radius: 12px; padding: 8px; text-align: center;">
+                        <div style="color: #00d4ff; font-size: 11px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;">Сверху</div>
+                        <canvas id="top2dCanvas" width="320" height="240" style="width: 100%; height: 180px; border-radius: 8px; background: #0a0a1a;"></canvas>
+                    </div>
+                    <div style="flex: 1; background: rgba(0,0,0,0.3); border-radius: 12px; padding: 8px; text-align: center;">
+                        <div style="color: #ff8800; font-size: 11px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;">Сбоку</div>
+                        <canvas id="side2dCanvas" width="320" height="240" style="width: 100%; height: 180px; border-radius: 8px; background: #0a0a1a;"></canvas>
+                    </div>
+                </div>
+                <div id="tracks2d_container" style="display: none; gap: 12px; margin-top: 16px; flex-wrap: wrap;"></div>
             </div>
             <div class="stats">
                 <div class="stat-card">
@@ -141,6 +159,8 @@
     </div>
 </div>
 
+<script src="threejs/three.min.js"></script>
+<script src="threejs/OrbitControls.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
