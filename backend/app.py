@@ -394,6 +394,7 @@ def track_3d():
 
         def process_camera(path, out_path, w, h, fps, label, max_miss=0, render=True):
             cap_ = cv2.VideoCapture(path)
+            local_detector = TennisBallDetector()  # отдельный экземпляр для каждого потока
             tracker_ = BallTracker2D(ignore_bottom=0)
             dets_ = {}
             all_frames = []
@@ -423,7 +424,7 @@ def track_3d():
                             print(f"  {label}: поверхность стола на строке {surface_row}")
                         else:
                             print(f"  {label}: поверхность стола не найдена")
-                d = detector.detect_video_frame(frame)
+                d = local_detector.detect_video_frame(frame)
                 tracker_.update(d, h)
                 if d:
                     dets_[n] = d[0]['center']
