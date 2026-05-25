@@ -475,8 +475,23 @@ def track_3d():
                 result.append({"frame": p['frame'], "x": round(lx, 1), "y": round(ly, 1)})
             return result
 
-        top_table_coords = to_table_pts(top_2d, top_table, top_w, top_h, 'top')
-        side_table_coords = to_table_pts(side_2d, side_table, side_w, side_h, 'side')
+        def smooth_pts(pts, window=2):
+            n = len(pts)
+            if n < window * 2 + 1:
+                return pts
+            kernel = np.ones(window) / window
+            xs = np.array([p['x'] for p in pts])
+            ys = np.array([p['y'] for p in pts])
+            pad_x = np.concatenate([[xs[0]] * (window // 2), xs, [xs[-1]] * (window // 2)])
+            pad_y = np.concatenate([[ys[0]] * (window // 2), ys, [ys[-1]] * (window // 2)])
+            sx = np.convolve(pad_x, kernel, mode='valid')
+            sy = np.convolve(pad_y, kernel, mode='valid')
+            sx[0], sx[-1] = xs[0], xs[-1]
+            sy[0], sy[-1] = ys[0], ys[-1]
+            return [{"frame": p['frame'], "x": round(sx[i], 1), "y": round(sy[i], 1)} for i, p in enumerate(pts)]
+
+        top_table_coords = smooth_pts(to_table_pts(top_2d, top_table, top_w, top_h, 'top'))
+        side_table_coords = smooth_pts(to_table_pts(side_2d, side_table, side_w, side_h, 'side'))
         if top_table_coords:
             tx_s = [p['x'] for p in top_table_coords]
             ty_s = [p['y'] for p in top_table_coords]

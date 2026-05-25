@@ -80,7 +80,7 @@ class BallTracker3D:
         best = max(detections, key=lambda d: d['confidence'])
         return best['center']
 
-    def _smooth_series(self, values, window=3):
+    def _smooth_series(self, values, window=2):
         n = len(values)
         if n < window * 2 + 1:
             return values
