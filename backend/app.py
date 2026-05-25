@@ -311,6 +311,43 @@ def track_2d():
 TRACKED_VIDEO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tracked_output')
 os.makedirs(TRACKED_VIDEO_DIR, exist_ok=True)
 
+calibration_temp = {}
+
+@app.route('/api/calibrate/get_frame', methods=['POST'])
+def calibrate_get_frame():
+    try:
+        camera = request.form.get('camera')
+        video_file = request.files['video']
+        temp_video = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        temp_video.write(video_file.read())
+        temp_video.close()
+        cap = cv2.VideoCapture(temp_video.name)
+        ret, frame = cap.read()
+        cap.release()
+        if not ret:
+            return jsonify({"error": "Не могу прочитать видео"}), 500
+        frame_name = f'calib_{camera}_{uuid.uuid4().hex}.jpg'
+        frame_path = os.path.join(TRACKED_VIDEO_DIR, frame_name)
+        cv2.imwrite(frame_path, frame)
+        calibration_temp[camera] = {'video_path': temp_video.name, 'frame_path': frame_path}
+        return jsonify({"success": True, "image_url": f'/api/track/video/{frame_name}'})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/calibrate/save_corners', methods=['POST'])
+def calibrate_save_corners():
+    try:
+        data = request.json
+        camera = data.get('camera')
+        if camera in calibration_temp:
+            for f in ['video_path', 'frame_path']:
+                if os.path.exists(calibration_temp[camera][f]):
+                    os.unlink(calibration_temp[camera][f])
+            del calibration_temp[camera]
+        return jsonify({"success": True, "message": f"Калибровка {camera} сохранена"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/track/video/<filename>')
 def serve_tracked_video(filename):
     filepath = os.path.join(TRACKED_VIDEO_DIR, filename)
