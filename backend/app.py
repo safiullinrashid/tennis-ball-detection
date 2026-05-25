@@ -364,6 +364,7 @@ def track_3d():
     try:
         file_top = request.files['video_top']
         file_side = request.files['video_side']
+        render_video = request.form.get('render_video', '0') == '1'
 
         vid_id = uuid.uuid4().hex
 
@@ -391,7 +392,7 @@ def track_3d():
         side_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap.release()
 
-        def process_camera(path, out_path, w, h, fps, label, max_miss=0):
+        def process_camera(path, out_path, w, h, fps, label, max_miss=0, render=True):
             cap_ = cv2.VideoCapture(path)
             tracker_ = BallTracker2D(ignore_bottom=0)
             dets_ = {}
@@ -430,16 +431,19 @@ def track_3d():
                     had_any = True
                 else:
                     miss += 1
-                frame = tracker_.draw_detections(frame, d, (0, 255, 0), 2)
-                frame = tracker_.draw_trajectory(frame, (0, 255, 255), 2)
-                all_frames.append(frame)
+                if render:
+                    frame = tracker_.draw_detections(frame, d, (0, 255, 0), 2)
+                    frame = tracker_.draw_trajectory(frame, (0, 255, 255), 2)
+                    all_frames.append(frame)
                 if max_miss and had_any and miss > max_miss and n > total * 0.2:
                     print(f"  {label}: мяч потерян на {miss} кадров, прерываем (кадр {n}/{total})")
                     break
                 if n % 60 == 0:
                     print(f"  {label}: кадр {n}")
             cap_.release()
-            ok = _write_video(all_frames, out_path, fps, w, h)
+            ok = True
+            if render:
+                ok = _write_video(all_frames, out_path, fps, w, h)
             print(f"  {label}: {len(dets_)} детекций, видео {'✓' if ok else '✗'}")
             for i, (fn, (dx, dy)) in enumerate(sorted(dets_.items())[:3]):
                 print(f"  {label} детекция #{i+1}: кадр {fn} → px=({dx:.0f}, {dy:.0f})")
@@ -449,8 +453,8 @@ def track_3d():
         side_out = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_side.mp4')
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            fut_top = executor.submit(process_camera, temp_top.name, top_out, top_w, top_h, top_fps, 'верхняя', 30)
-            fut_side = executor.submit(process_camera, temp_side.name, side_out, side_w, side_h, side_fps, 'боковая', 30)
+            fut_top = executor.submit(process_camera, temp_top.name, top_out, top_w, top_h, top_fps, 'верхняя', 30, render_video)
+            fut_side = executor.submit(process_camera, temp_side.name, side_out, side_w, side_h, side_fps, 'боковая', 30, render_video)
             top_dets, top_table, _ = fut_top.result()
             side_dets, side_table, _ = fut_side.result()
 

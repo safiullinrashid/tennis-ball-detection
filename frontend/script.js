@@ -274,6 +274,7 @@ process3dBtn.addEventListener('click', async () => {
     const formData = new FormData();
     formData.append('video_top', video3dTopFile);
     formData.append('video_side', video3dSideFile);
+    formData.append('render_video', document.getElementById('renderVideoCheck').checked ? '1' : '0');
 
     try {
         const controller = new AbortController();
