@@ -446,7 +446,7 @@ def track_3d():
                 if n == 1:
                     if table_bounds is None:
                         table_bounds = table_detector.detect_bounds(frame)
-                    if table_bounds:
+                    if table_bounds is not None:
                         print(f"  {label}: bounds стола {table_bounds} (frame={w}x{h})")
                     else:
                         print(f"  {label}: стол не найден, используется весь кадр")
