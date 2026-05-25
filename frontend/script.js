@@ -277,7 +277,7 @@ process3dBtn.addEventListener('click', async () => {
 
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 600000);
+        const timeoutId = setTimeout(() => controller.abort(), 900000);
         const response = await fetch('http://localhost:5000/api/track/3d', {
             method: 'POST',
             body: formData,
@@ -372,7 +372,7 @@ process3dBtn.addEventListener('click', async () => {
     } catch (error) {
         console.error('Error:', error);
         if (error.name === 'AbortError') {
-            alert('3D обработка не завершилась за 10 минут. Слишком длинное видео.');
+            alert('3D обработка не завершилась за 15 минут. Слишком длинное видео.');
         } else {
             alert('Ошибка соединения: ' + error.message + '\nПроверьте, запущен ли сервер (http://localhost:5000)');
         }

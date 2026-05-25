@@ -67,8 +67,6 @@ class TableDetector:
         return int(np.argmax(smooth))
 
     def pixel_to_table(self, px, py, bounds, frame_h, frame_w, camera='top'):
-        MAX_H = TABLE_H + NET_H * 2
-
         if camera == 'top' and bounds is not None:
             bx, by, bw, bh = bounds
             rel_x = (px - bx) / bw
@@ -80,7 +78,14 @@ class TableDetector:
         if camera == 'top':
             lx = (1 - py / frame_h) * COURT_W
             ly = (1 - px / frame_w) * COURT_H
-        else:
-            lx = (px / frame_w) * COURT_W
-            ly = max(0, min(MAX_H, (1 - py / frame_h) * TABLE_H * 2))
+        else:  # side camera
+            if bounds is not None:
+                bx, by, bw, bh = bounds
+                scale = COURT_W / bw if bw > 0 else 1.0
+                lx = (px - bx) * scale
+                pixels_above_table = (by + bh - py)
+                ly = TABLE_H + pixels_above_table * scale
+            else:
+                lx = (px / frame_w) * COURT_W
+                ly = (1 - py / frame_h) * TABLE_H * 2
         return lx, ly

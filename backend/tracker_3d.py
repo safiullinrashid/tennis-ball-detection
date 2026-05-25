@@ -30,8 +30,6 @@ class BallTracker3D:
         h_side, w_side = shape_side[:2]
 
         def _to_table_coords(px, py, bounds, fw, fh, camera):
-            MAX_H = TABLE_H + NET_H * 2
-
             if camera == 'top' and bounds is not None:
                 bx, by, bw, bh = bounds
                 rx = (px - bx) / bw
@@ -41,9 +39,19 @@ class BallTracker3D:
             elif camera == 'top':
                 lx = (1 - py / fh) * COURT_W
                 ly = (1 - px / fw) * COURT_H
-            else:
-                lx = (px / fw) * COURT_W
-                ly = max(0, min(MAX_H, (1 - py / fh) * TABLE_H * 2))
+            else:  # side camera
+                if bounds is not None:
+                    bx, by, bw, bh = bounds
+                    scale = COURT_W / bw if bw > 0 else 1.0
+                    table_center_px = bx + bw / 2
+                    real_center = COURT_W / 2
+                    offset_px = px - table_center_px
+                    lx = real_center + offset_px * scale
+                    pixels_above_table = (by + bh - py)
+                    ly = TABLE_H + pixels_above_table * scale
+                else:
+                    lx = (px / fw) * COURT_W
+                    ly = (1 - py / fh) * TABLE_H * 2
             return lx, ly
 
         length_from_top, width_from_top = _to_table_coords(
@@ -52,7 +60,6 @@ class BallTracker3D:
             x_side, y_side, table_side, w_side, h_side, 'side')
 
         x_final = (length_from_top + length_from_side) / 2
-        height = min(height, TABLE_H + NET_H * 2)
 
         point_3d = {
             "frame": self.frame_count,
