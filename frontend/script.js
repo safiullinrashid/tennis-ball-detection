@@ -394,7 +394,7 @@ function initScene3d(points) {
             <input type="range" id="scrubber3d" min="0" max="1" step="0.001" style="width: 200px; accent-color: #00d4ff;">
             <span id="frameInfo3d" style="color: #aaa; font-size: 12px; min-width: 60px;">0/0</span>
             <span style="color:#888;font-size:11px;">скорость</span>
-            <input type="range" id="speed3d" min="1" max="10" value="4" step="1" style="width:60px;accent-color:#ff8800;">
+            <input type="range" id="speed3d" min="1" max="10" value="8" step="1" style="width:60px;accent-color:#ff8800;">
         </div>`;
         renderer3d = null;
     }
