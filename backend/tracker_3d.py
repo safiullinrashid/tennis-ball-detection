@@ -60,7 +60,7 @@ class BallTracker3D:
         length_from_side, height = _to_table_coords(
             x_side, y_side, table_side, w_side, h_side, 'side')
 
-        x_final = (length_from_top + length_from_side) / 2
+        x_final = 0.2 * length_from_top + 0.8 * length_from_side
 
         point_3d = {
             "frame": self.frame_count,
