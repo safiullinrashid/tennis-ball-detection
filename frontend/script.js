@@ -394,8 +394,8 @@ function initScene3d(points) {
             <input type="range" id="scrubber3d" min="0" max="1" step="0.001" style="width: 200px; accent-color: #00d4ff;">
             <span id="frameInfo3d" style="color: #aaa; font-size: 12px; min-width: 60px;">0/0</span>
             <span style="color:#888;font-size:11px;">скорость</span>
-            <input type="range" id="speed3d" min="1" max="20" value="10" step="1" style="width:80px;accent-color:#ff8800;" oninput="document.getElementById('speedVal3d').textContent=this.value">
-            <span id="speedVal3d" style="color:#ff8800;font-size:12px;min-width:18px;">10</span>
+            <input type="range" id="speed3d" min="1" max="20" value="15" step="1" style="width:80px;accent-color:#ff8800;" oninput="document.getElementById('speedVal3d').textContent=this.value">
+            <span id="speedVal3d" style="color:#ff8800;font-size:12px;min-width:18px;">15</span>
         </div>`;
         renderer3d = null;
     }
@@ -573,7 +573,8 @@ function initScene3d(points) {
         if (isPlaying) {
             speedCounter++;
             const speedEl = document.getElementById('speed3d');
-            const step = speedEl ? parseInt(speedEl.value) : 2;
+            const val = speedEl ? parseInt(speedEl.value) : 10;
+            const step = 21 - val;
             if (speedCounter % step === 0 && animFrame < points.length - 1) {
                 animFrame++;
                 updateBallPosition(animFrame);

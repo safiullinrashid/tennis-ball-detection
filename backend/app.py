@@ -512,7 +512,7 @@ def track_3d():
                 result.append({"frame": p['frame'], "x": round(lx, 1), "y": round(ly, 1)})
             return result
 
-        def smooth_pts(pts, window=2):
+        def smooth_pts(pts, window=1):
             n = len(pts)
             if n < window * 2 + 1:
                 return pts
