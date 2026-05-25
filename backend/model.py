@@ -67,13 +67,10 @@ class TableDetector:
         return int(np.argmax(smooth))
 
     def pixel_to_table(self, px, py, bounds, frame_h, frame_w, camera='top', M_calib=None):
-        if M_calib is not None:
+        if camera == 'top' and M_calib is not None:
             pts = np.array([[[px, py]]], dtype=np.float32)
             transformed = cv2.perspectiveTransform(pts, M_calib)
-            lx, ly = float(transformed[0, 0, 0]), float(transformed[0, 0, 1])
-            if camera == 'side':
-                return lx, ly
-            return lx, ly
+            return float(transformed[0, 0, 0]), float(transformed[0, 0, 1])
 
         if camera == 'top' and bounds is not None:
             bx, by, bw, bh = bounds

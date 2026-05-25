@@ -34,10 +34,9 @@ class BallTracker3D:
         h_side, w_side = shape_side[:2]
 
         def _to_table_coords(px, py, bounds, fw, fh, camera):
-            M = self.M_top if camera == 'top' else self.M_side
-            if M is not None:
+            if camera == 'top' and self.M_top is not None:
                 pts = np.array([[[px, py]]], dtype=np.float32)
-                transformed = cv2.perspectiveTransform(pts, M)
+                transformed = cv2.perspectiveTransform(pts, self.M_top)
                 return float(transformed[0, 0, 0]), float(transformed[0, 0, 1])
 
             if camera == 'top' and bounds is not None:
@@ -49,14 +48,11 @@ class BallTracker3D:
             elif camera == 'top':
                 lx = (1 - py / fh) * COURT_W
                 ly = (1 - px / fw) * COURT_H
-            else:  # side camera
+            else:  # side camera — всегда bounds-based, гомография неприменима
                 if bounds is not None:
                     bx, by, bw, bh = bounds
                     scale = COURT_W / bw if bw > 0 else 1.0
-                    table_center_px = bx + bw / 2
-                    real_center = COURT_W / 2
-                    offset_px = px - table_center_px
-                    lx = real_center + offset_px * scale
+                    lx = (px - bx) * scale
                     pixels_above_table = (by + bh - py)
                     ly = TABLE_H + pixels_above_table * scale
                 else:
