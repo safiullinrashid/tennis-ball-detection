@@ -1,5 +1,7 @@
+import cv2
 import numpy as np
 from collections import deque
+from scipy.ndimage import uniform_filter1d
 
 COURT_W = 274.0
 COURT_H = 152.5
@@ -7,11 +9,13 @@ TABLE_H = 76.0
 NET_H = 15.25
 
 class BallTracker3D:
-    def __init__(self, max_history=500):
+    def __init__(self, max_history=500, M_top=None, M_side=None):
         self.trajectory_3d = []
         self.history_top = deque(maxlen=2)
         self.history_side = deque(maxlen=2)
         self.frame_count = 0
+        self.M_top = M_top
+        self.M_side = M_side
 
     def update(self, detections_top, detections_side, shape_top, shape_side,
                table_top=None, table_side=None):
@@ -30,6 +34,12 @@ class BallTracker3D:
         h_side, w_side = shape_side[:2]
 
         def _to_table_coords(px, py, bounds, fw, fh, camera):
+            M = self.M_top if camera == 'top' else self.M_side
+            if M is not None:
+                pts = np.array([[[px, py]]], dtype=np.float32)
+                transformed = cv2.perspectiveTransform(pts, M)
+                return float(transformed[0, 0, 0]), float(transformed[0, 0, 1])
+
             if camera == 'top' and bounds is not None:
                 bx, by, bw, bh = bounds
                 rx = (px - bx) / bw
@@ -79,12 +89,30 @@ class BallTracker3D:
         best = max(detections, key=lambda d: d['confidence'])
         return best['center']
 
+    def _smooth_series(self, values, window=5):
+        if len(values) < window * 2:
+            return values
+        arr = np.array(values, dtype=float)
+        return uniform_filter1d(arr, size=window, mode='nearest').tolist()
+
     def get_trajectory_3d(self):
-        if self.trajectory_3d:
-            zs = [p['Z'] for p in self.trajectory_3d]
-            min_z = min(zs)
-            shift = TABLE_H - min_z
-            if abs(shift) > 2:
-                for p in self.trajectory_3d:
-                    p['Z'] = round(p['Z'] + shift, 1)
-        return self.trajectory_3d
+        if not self.trajectory_3d:
+            return []
+        pts = self.trajectory_3d
+
+        xs = self._smooth_series([p['X'] for p in pts])
+        ys = self._smooth_series([p['Y'] for p in pts])
+        zs = self._smooth_series([p['Z'] for p in pts])
+        min_z = min(zs)
+        shift = TABLE_H - min_z
+        if abs(shift) > 2:
+            zs = [round(z + shift, 1) for z in zs]
+        result = []
+        for i, p in enumerate(pts):
+            result.append({
+                "frame": p['frame'],
+                "X": round(xs[i], 1),
+                "Y": round(ys[i], 1),
+                "Z": round(zs[i], 1)
+            })
+        return result

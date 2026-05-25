@@ -675,46 +675,89 @@ function draw2dTrackOnCanvas(canvas, points, color) {
 
 // Калибровка камер
 calibrateBtn?.addEventListener('click', () => {
-    showCalibrationModal();
+    showCalibrationDialog();
 });
 
-function showCalibrationModal() {
+function showCalibrationDialog() {
     const modal = document.createElement('div');
     modal.className = 'calibration-modal';
     modal.innerHTML = `
         <div class="calibration-content">
-            <h3>Калибровка камер</h3>
-            <p style="color:#ccc; font-size:12px;">Отметьте 4 угла стола на изображении сверху</p>
-            <input type="file" id="calibImageInput" accept="image/*">
-            <div id="calibPoints" style="margin: 16px 0;">
-                <p style="color:#888; font-size:12px;">После загрузки изображения кликните по 4 углам стола:</p>
-                <p style="color:#00d4ff; font-size:11px;">1 - левый дальний | 2 - правый дальний | 3 - левый ближний | 4 - правый ближний</p>
+            <h3>Калибровка камеры</h3>
+            <p style="color:#ccc; font-size:12px;">Выберите камеру для калибровки:</p>
+            <div style="display: flex; gap: 12px; margin: 16px 0;">
+                <button id="calibTopBtn" style="flex:1; padding: 10px; background: #00d4ff20; border: 1px solid #00d4ff; border-radius: 8px; cursor: pointer;">Камера СВЕРХУ</button>
+                <button id="calibSideBtn" style="flex:1; padding: 10px; background: #ff880020; border: 1px solid #ff8800; border-radius: 8px; cursor: pointer;">Камера СБОКУ</button>
             </div>
-            <button id="saveCalibBtn" disabled>Сохранить калибровку</button>
-            <button id="closeCalibBtn" style="margin-top:8px; background:rgba(255,255,255,0.1);">Закрыть</button>
+            <div id="calibUploadArea" style="display: none;">
+                <div class="upload-area" style="margin: 12px 0; padding: 20px;">
+                    <p>Загрузите видео для калибровки</p>
+                    <input type="file" id="calibVideoInput" accept="video/*" style="display: none;">
+                    <button id="selectVideoBtn" class="process-btn" style="padding: 8px 16px;">Выбрать видео</button>
+                </div>
+                <div id="calibCanvasArea" style="display: none;">
+                    <p style="color:#00d4ff;">Кликните по 4 углам стола в порядке:</p>
+                    <p style="font-size: 11px; color:#888;">1 - левый дальний | 2 - правый дальний | 3 - левый ближний | 4 - правый ближний</p>
+                    <canvas id="calibCanvas" style="max-width: 100%; border-radius: 8px; cursor: crosshair;"></canvas>
+                    <button id="saveCalibrationBtn" class="process-btn" style="margin-top: 12px;" disabled>Сохранить калибровку</button>
+                </div>
+            </div>
+            <button id="closeCalibModal" style="margin-top: 16px; background: rgba(255,255,255,0.1); padding: 8px; border-radius: 6px; cursor: pointer;">Закрыть</button>
         </div>
     `;
     document.body.appendChild(modal);
 
+    let selectedCamera = null;
     let corners = [];
-    const imgInput = modal.querySelector('#calibImageInput');
-    const saveBtn = modal.querySelector('#saveCalibBtn');
+    let calibVideoFile = null;
 
-    imgInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const url = URL.createObjectURL(file);
+    modal.querySelector('#calibTopBtn').onclick = () => {
+        selectedCamera = 'top';
+        modal.querySelector('#calibUploadArea').style.display = 'block';
+        modal.querySelector('#calibTopBtn').style.background = '#00d4ff40';
+        modal.querySelector('#calibSideBtn').style.background = '#ff880020';
+    };
+
+    modal.querySelector('#calibSideBtn').onclick = () => {
+        selectedCamera = 'side';
+        modal.querySelector('#calibUploadArea').style.display = 'block';
+        modal.querySelector('#calibSideBtn').style.background = '#ff880040';
+        modal.querySelector('#calibTopBtn').style.background = '#00d4ff20';
+    };
+
+    modal.querySelector('#selectVideoBtn').onclick = () => {
+        document.getElementById('calibVideoInput').click();
+    };
+
+    document.getElementById('calibVideoInput').onchange = async (e) => {
+        calibVideoFile = e.target.files[0];
+        if (!calibVideoFile) return;
+
+        modal.querySelector('#calibCanvasArea').style.display = 'block';
+
+        const formData = new FormData();
+        formData.append('camera', selectedCamera);
+        formData.append('video', calibVideoFile);
+
+        const response = await fetch('http://localhost:5000/api/calibrate/get_frame', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+
+        if (data.success) {
             const img = new Image();
             img.onload = () => {
-                const canvas = document.createElement('canvas');
+                const canvas = document.getElementById('calibCanvas');
                 canvas.width = img.width;
                 canvas.height = img.height;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0);
 
+                corners = [];
                 let clickCount = 0;
-                canvas.style.cursor = 'crosshair';
-                canvas.addEventListener('click', (e) => {
+
+                canvas.onclick = (e) => {
                     const rect = canvas.getBoundingClientRect();
                     const scaleX = canvas.width / rect.width;
                     const scaleY = canvas.height / rect.height;
@@ -723,45 +766,43 @@ function showCalibrationModal() {
 
                     corners.push([x, y]);
                     ctx.beginPath();
-                    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                    ctx.arc(x, y, 6, 0, 2 * Math.PI);
                     ctx.fillStyle = '#00d4ff';
                     ctx.fill();
                     ctx.fillStyle = 'white';
-                    ctx.font = '16px Arial';
-                    ctx.fillText(clickCount + 1, x - 10, y - 10);
+                    ctx.font = 'bold 16px Arial';
+                    ctx.fillText(clickCount + 1, x + 8, y - 8);
 
                     clickCount++;
                     if (clickCount === 4) {
-                        saveBtn.disabled = false;
+                        document.getElementById('saveCalibrationBtn').disabled = false;
                     }
-                });
-
-                modal.querySelector('#calibPoints').appendChild(canvas);
+                };
             };
-            img.src = url;
+            img.src = 'http://localhost:5000' + data.image_url;
+        } else {
+            alert('Ошибка: ' + data.error);
         }
-    });
+    };
 
-    saveBtn.addEventListener('click', async () => {
+    modal.querySelector('#saveCalibrationBtn').onclick = async () => {
         if (corners.length === 4) {
-            try {
-                const response = await fetch('http://localhost:5000/api/calibrate/top', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ corners: corners })
-                });
-                const result = await response.json();
-                if (result.success) {
-                    alert('Калибровка сохранена!');
-                    modal.remove();
-                }
-            } catch (error) {
-                alert('Ошибка калибровки: ' + error.message);
+            const response = await fetch('http://localhost:5000/api/calibrate/save_corners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ camera: selectedCamera, corners: corners })
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert(`Калибровка ${selectedCamera} сохранена!`);
+                modal.remove();
+            } else {
+                alert('Ошибка: ' + result.error);
             }
         }
-    });
+    };
 
-    modal.querySelector('#closeCalibBtn').addEventListener('click', () => modal.remove());
+    modal.querySelector('#closeCalibModal').onclick = () => modal.remove();
 }
 
 // Закрыть результат
