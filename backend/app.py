@@ -311,72 +311,6 @@ def track_2d():
 TRACKED_VIDEO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tracked_output')
 os.makedirs(TRACKED_VIDEO_DIR, exist_ok=True)
 
-calibration_temp = {}
-
-def _load_calibration(camera):
-    path = os.path.join(TRACKED_VIDEO_DIR, f'calibration_{camera}.npy')
-    if os.path.exists(path):
-        return np.load(path)
-    return None
-
-@app.route('/api/calibrate/get_frame', methods=['POST'])
-def calibrate_get_frame():
-    try:
-        camera = request.form.get('camera')
-        video_file = request.files['video']
-        temp_video = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-        temp_video.write(video_file.read())
-        temp_video.close()
-        cap = cv2.VideoCapture(temp_video.name)
-        ret, frame = cap.read()
-        cap.release()
-        if not ret:
-            return jsonify({"error": "Не могу прочитать видео"}), 500
-        frame_name = f'calib_{camera}_{uuid.uuid4().hex}.jpg'
-        frame_path = os.path.join(TRACKED_VIDEO_DIR, frame_name)
-        cv2.imwrite(frame_path, frame)
-        calibration_temp[camera] = {'video_path': temp_video.name, 'frame_path': frame_path}
-        return jsonify({"success": True, "image_url": f'/api/track/video/{frame_name}'})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/calibrate/save_corners', methods=['POST'])
-def calibrate_save_corners():
-    try:
-        data = request.json
-        camera = data.get('camera')
-        corners = data.get('corners')
-        if camera not in calibration_temp:
-            return jsonify({"error": "Сначала получите кадр для калибровки"}), 400
-        calib_file = os.path.join(TRACKED_VIDEO_DIR, f'calibration_{camera}.npy')
-        if camera == 'side':
-            xs = [c[0] for c in corners]
-            ys = [c[1] for c in corners]
-            bx, by = min(xs), min(ys)
-            bw, bh = max(xs) - bx, max(ys) - by
-            np.save(calib_file, np.float32([bx, by, bw, bh]))
-        else:
-            real_corners = np.float32([
-                [0, 0], [COURT_W, 0], [0, COURT_H], [COURT_W, COURT_H]
-            ])
-            image_corners = np.float32(corners)
-            matrix, _ = cv2.findHomography(image_corners, real_corners)
-            np.save(calib_file, matrix)
-        if camera in calibration_temp:
-            for f in ['video_path', 'frame_path']:
-                if os.path.exists(calibration_temp[camera][f]):
-                    os.unlink(calibration_temp[camera][f])
-            del calibration_temp[camera]
-        return jsonify({"success": True, "message": f"Калибровка {camera} сохранена"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/calibrate/check', methods=['GET'])
-def calibrate_check():
-    top_exists = os.path.exists(os.path.join(TRACKED_VIDEO_DIR, 'calibration_top.npy'))
-    side_exists = os.path.exists(os.path.join(TRACKED_VIDEO_DIR, 'calibration_side.npy'))
-    return jsonify({"top_calibrated": top_exists, "side_calibrated": side_exists})
-
 @app.route('/api/track/video/<filename>')
 def serve_tracked_video(filename):
     filepath = os.path.join(TRACKED_VIDEO_DIR, filename)
@@ -419,20 +353,13 @@ def track_3d():
         side_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap.release()
 
-        M_top = _load_calibration('top')
-        M_side = _load_calibration('side')
-        if M_top is not None:
-            print(f"Загружена калибровка верхней камеры")
-        if M_side is not None:
-            print(f"Загружена калибровка боковой камеры")
-
-        def process_camera(path, out_path, w, h, fps, label, calib_bounds=None):
+        def process_camera(path, out_path, w, h, fps, label):
             cap_ = cv2.VideoCapture(path)
             tracker_ = BallTracker2D(ignore_bottom=0)
             dets_ = {}
             all_frames = []
             n = 0
-            table_bounds = calib_bounds
+            table_bounds = None
             surface_row = None
             total = int(cap_.get(cv2.CAP_PROP_FRAME_COUNT))
             print(f"Обработка {label}: {total} кадров, {w}x{h}, fps={fps}")
@@ -444,9 +371,8 @@ def track_3d():
                     frame = cv2.resize(frame, (w, h))
                 n += 1
                 if n == 1:
-                    if table_bounds is None:
-                        table_bounds = table_detector.detect_bounds(frame)
-                    if table_bounds is not None:
+                    table_bounds = table_detector.detect_bounds(frame)
+                    if table_bounds:
                         print(f"  {label}: bounds стола {table_bounds} (frame={w}x{h})")
                     else:
                         print(f"  {label}: стол не найден, используется весь кадр")
@@ -475,10 +401,8 @@ def track_3d():
         top_out = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_top.mp4')
         side_out = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_side.mp4')
 
-        # Для боковой камеры калибровка хранит bounds, для верхней — матрицу гомографии
-        side_calib_bounds = M_side if M_side is not None and M_side.shape == (4,) else None
         top_dets, top_table, _ = process_camera(temp_top.name, top_out, top_w, top_h, top_fps, 'верхняя')
-        side_dets, side_table, _ = process_camera(temp_side.name, side_out, side_w, side_h, side_fps, 'боковая', calib_bounds=side_calib_bounds)
+        side_dets, side_table, _ = process_camera(temp_side.name, side_out, side_w, side_h, side_fps, 'боковая')
 
         top_video_ok = os.path.exists(top_out) and os.path.getsize(top_out) > 0
         side_video_ok = os.path.exists(side_out) and os.path.getsize(side_out) > 0
@@ -490,7 +414,7 @@ def track_3d():
         print(f"  Всего детекций: верх {len(top_dets)}, бок {len(side_dets)}")
 
         print("Сборка 3D траектории...")
-        tracker3d = BallTracker3D(M_top=M_top, M_side=M_side)
+        tracker3d = BallTracker3D()
         # Поиск совпадений с учётом разницы FPS
         fps_ratio = side_fps / top_fps if top_fps > 0 else 1.0
         side_keys = sorted(side_dets.keys())
@@ -542,9 +466,17 @@ def track_3d():
             mid = trajectory[len(trajectory)//2]
             print(f"  3D точка (середина): кадр {mid['frame']} → X={mid['X']} Y={mid['Y']} Z={mid['Z']}")
 
-        # Используем сглаженную 3D траекторию для PNG — гарантирует консистентность
-        top_table_coords = [{"frame": p['frame'], "x": p['X'], "y": p['Y']} for p in trajectory]
-        side_table_coords = [{"frame": p['frame'], "x": p['X'], "y": p['Z']} for p in trajectory]
+        # Конвертируем пиксельные координаты → координаты стола (см) для PNG
+        def to_table_pts(pts, bounds, fw, fh, camera):
+            result = []
+            for p in pts:
+                lx, ly = table_detector.pixel_to_table(
+                    p['x'], p['y'], bounds, fh, fw, camera)
+                result.append({"frame": p['frame'], "x": round(lx, 1), "y": round(ly, 1)})
+            return result
+
+        top_table_coords = to_table_pts(top_2d, top_table, top_w, top_h, 'top')
+        side_table_coords = to_table_pts(side_2d, side_table, side_w, side_h, 'side')
         if top_table_coords:
             tx_s = [p['x'] for p in top_table_coords]
             ty_s = [p['y'] for p in top_table_coords]
@@ -553,6 +485,13 @@ def track_3d():
             sx_s = [p['x'] for p in side_table_coords]
             sy_s = [p['y'] for p in side_table_coords]
             print(f"  PNG бок: X={min(sx_s):.0f}–{max(sx_s):.0f} Y={min(sy_s):.0f}–{max(sy_s):.0f} ({len(side_table_coords)} точек)")
+            # Сдвиг высоты — так же, как в tracker_3d.get_trajectory_3d
+            min_y_side = min(sy_s)
+            side_shift = TABLE_H - min_y_side
+            if abs(side_shift) > 2:
+                for p in side_table_coords:
+                    p['y'] = round(p['y'] + side_shift, 1)
+                print(f"  PNG бок сдвиг Y: min={min_y_side:.0f} → shift={side_shift:.0f}")
 
         # Генерируем изображения траекторий на фоне стола
         top_png = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_top_traj.png')

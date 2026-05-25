@@ -66,12 +66,7 @@ class TableDetector:
         smooth = np.convolve(blue_per_row.astype(float), kernel, mode='same')
         return int(np.argmax(smooth))
 
-    def pixel_to_table(self, px, py, bounds, frame_h, frame_w, camera='top', M_calib=None):
-        if camera == 'top' and M_calib is not None:
-            pts = np.array([[[px, py]]], dtype=np.float32)
-            transformed = cv2.perspectiveTransform(pts, M_calib)
-            return float(transformed[0, 0, 0]), float(transformed[0, 0, 1])
-
+    def pixel_to_table(self, px, py, bounds, frame_h, frame_w, camera='top'):
         if camera == 'top' and bounds is not None:
             bx, by, bw, bh = bounds
             rel_x = (px - bx) / bw
