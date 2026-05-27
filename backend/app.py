@@ -26,6 +26,35 @@ CORS(app)
 detector = TennisBallDetector()
 table_detector = TableDetector()
 
+
+def _find_flash_frame(video_path, max_frames=2000):
+    """Ищет кадр со вспышкой — самый яркий кадр, значительно ярче соседей.
+    Возвращает 0-индексный номер кадра или None."""
+    cap = cv2.VideoCapture(video_path)
+    brightness = []
+    n = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret or n > max_frames:
+            break
+        n += 1
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        brightness.append(float(np.mean(gray)))
+    cap.release()
+    if len(brightness) < 5:
+        return None
+    arr = np.array(brightness)
+    idx = int(np.argmax(arr))
+    val = arr[idx]
+    if idx < 2 or idx >= len(arr) - 2:
+        return None
+    local = np.concatenate([arr[max(0, idx-10):idx], arr[idx+1:min(len(arr), idx+11)]])
+    local_avg = float(np.mean(local))
+    if val < local_avg * 1.15:
+        return None
+    print(f"  Вспышка: кадр {idx}, яркость={val:.0f}, фон={local_avg:.0f}")
+    return idx
+
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok"})
@@ -392,6 +421,15 @@ def track_3d():
         side_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap.release()
 
+        # Синхронизация по вспышке
+        flash_top = _find_flash_frame(temp_top.name)
+        flash_side = _find_flash_frame(temp_side.name)
+        flash_offset = None
+        if flash_top is not None and flash_side is not None:
+            fps_ratio = side_fps / top_fps if top_fps > 0 else 1.0
+            flash_offset = flash_side - round(flash_top * fps_ratio)
+            print(f"  Синхронизация: вспышка верх={flash_top}, бок={flash_side}, offset={flash_offset}")
+
         def process_camera(path, out_path, w, h, fps, label, max_miss=0, render=True):
             cap_ = cv2.VideoCapture(path)
             local_detector = TennisBallDetector()  # отдельный экземпляр для каждого потока
@@ -523,7 +561,6 @@ def track_3d():
 
         print("Сборка 3D траектории...")
         tracker3d = BallTracker3D()
-        # Поиск совпадений с учётом разницы FPS
         fps_ratio = side_fps / top_fps if top_fps > 0 else 1.0
         side_keys = sorted(side_dets.keys())
         used_side = set()
@@ -532,8 +569,10 @@ def track_3d():
         for tf in sorted(top_dets.keys()):
             best = None
             best_dist = 999
-            expected_sf = int(round(tf * fps_ratio))
-            # Ищем в окрестности ожидаемого кадра
+            if flash_offset is not None:
+                expected_sf = int(round(tf * fps_ratio)) + flash_offset
+            else:
+                expected_sf = int(round(tf * fps_ratio))
             for sf in side_keys:
                 if sf in used_side:
                     continue
