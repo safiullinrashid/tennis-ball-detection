@@ -421,16 +421,15 @@ def track_3d():
         side_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap.release()
 
-        # Синхронизация по вспышке
+        # Синхронизация по вспышке — начинаем детекцию с кадра вспышки
         flash_top = _find_flash_frame(temp_top.name)
         flash_side = _find_flash_frame(temp_side.name)
-        flash_offset = None
-        if flash_top is not None and flash_side is not None:
-            fps_ratio = side_fps / top_fps if top_fps > 0 else 1.0
-            flash_offset = flash_side - round(flash_top * fps_ratio)
-            print(f"  Синхронизация: вспышка верх={flash_top}, бок={flash_side}, offset={flash_offset}")
+        if flash_top is not None:
+            print(f"  Верх: кадр вспышки {flash_top}")
+        if flash_side is not None:
+            print(f"  Бок: кадр вспышки {flash_side}")
 
-        def process_camera(path, out_path, w, h, fps, label, max_miss=0, render=True):
+        def process_camera(path, out_path, w, h, fps, label, flash_frame=None, max_miss=0, render=True):
             cap_ = cv2.VideoCapture(path)
             local_detector = TennisBallDetector()  # отдельный экземпляр для каждого потока
             tracker_ = BallTracker2D(ignore_bottom=0)
@@ -442,6 +441,11 @@ def track_3d():
             total = int(cap_.get(cv2.CAP_PROP_FRAME_COUNT))
             miss = 0
             had_any = False
+            first_frame = True
+            if flash_frame is not None and flash_frame < total:
+                cap_.set(cv2.CAP_PROP_POS_FRAMES, flash_frame)
+                n = flash_frame
+                print(f"  {label}: начинаем с кадра {flash_frame} (вспышка)")
             print(f"Обработка {label}: {total} кадров, {w}x{h}, fps={fps}")
             while True:
                 ret, frame = cap_.read()
@@ -450,7 +454,8 @@ def track_3d():
                 if frame.shape[1] != w or frame.shape[0] != h:
                     frame = cv2.resize(frame, (w, h))
                 n += 1
-                if n == 1:
+                if n == 1 or first_frame:
+                    first_frame = False
                     cam_type = 'side' if label == 'боковая' else 'top'
                     table_bounds = table_detector.detect_bounds(frame, camera=cam_type)
                     if table_bounds:
@@ -490,7 +495,7 @@ def track_3d():
                     frame = tracker_.draw_detections(frame, d, (0, 255, 0), 2)
                     frame = tracker_.draw_trajectory(frame, (0, 255, 255), 2)
                     all_frames.append(frame)
-                if max_miss and had_any and miss > max_miss and n > total * 0.2:
+                if max_miss and had_any and miss > max_miss and (n - (flash_frame or 0)) > total * 0.2:
                     print(f"  {label}: мяч потерян на {miss} кадров, прерываем (кадр {n}/{total})")
                     break
                 if n % 60 == 0:
@@ -508,8 +513,10 @@ def track_3d():
         side_out = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_side.mp4')
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            fut_top = executor.submit(process_camera, temp_top.name, top_out, top_w, top_h, top_fps, 'верхняя', 300, render_video)
-            fut_side = executor.submit(process_camera, temp_side.name, side_out, side_w, side_h, side_fps, 'боковая', 300, render_video)
+            fut_top = executor.submit(process_camera, temp_top.name, top_out, top_w, top_h, top_fps, 'верхняя',
+                                      flash_frame=flash_top, max_miss=300, render=render_video)
+            fut_side = executor.submit(process_camera, temp_side.name, side_out, side_w, side_h, side_fps, 'боковая',
+                                       flash_frame=flash_side, max_miss=300, render=render_video)
             top_dets, top_table, top_surface = fut_top.result()
             side_dets, side_table, side_surface = fut_side.result()
 
@@ -569,10 +576,7 @@ def track_3d():
         for tf in sorted(top_dets.keys()):
             best = None
             best_dist = 999
-            if flash_offset is not None:
-                expected_sf = int(round(tf * fps_ratio)) + flash_offset
-            else:
-                expected_sf = int(round(tf * fps_ratio))
+            expected_sf = int(round(tf * fps_ratio))
             for sf in side_keys:
                 if sf in used_side:
                     continue
