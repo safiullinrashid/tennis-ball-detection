@@ -15,7 +15,7 @@ class BallTracker3D:
         self.frame_count = 0
 
     def update(self, detections_top, detections_side, shape_top, shape_side,
-               table_top=None, table_side=None):
+               table_top=None, table_side=None, surface_row_side=None):
         self.frame_count += 1
 
         point_top = self._best_point(detections_top)
@@ -30,7 +30,7 @@ class BallTracker3D:
         h_top, w_top = shape_top[:2]
         h_side, w_side = shape_side[:2]
 
-        def _to_table_coords(px, py, bounds, fw, fh, camera):
+        def _to_table_coords(px, py, bounds, fw, fh, camera, surface_row=None):
             if camera == 'top' and bounds is not None:
                 bx, by, bw, bh = bounds
                 rx = (px - bx) / bw
@@ -42,14 +42,16 @@ class BallTracker3D:
                 ly = (1 - px / fw) * COURT_H
             else:  # side camera
                 if bounds is not None:
-                    bx, by, bw, bh = bounds
+                    if len(bounds) == 6:
+                        bx, by, bw, bh, slope, intercept = bounds
+                    else:
+                        bx, by, bw, bh = bounds
+                        slope, intercept = 0, by + bh
                     scale = COURT_W / bw if bw > 0 else 1.0
-                    table_center_px = bx + bw / 2
-                    real_center = COURT_W / 2
-                    offset_px = px - table_center_px
-                    lx = real_center + offset_px * scale
-                    pixels_above_table = (by + bh - py)
-                    ly = TABLE_H + pixels_above_table * scale
+                    lx = (px - bx) * scale
+                    surface_y = surface_row if surface_row is not None else (slope * px + intercept)
+                    pixels_above_table = surface_y - py
+                    ly = TABLE_H + pixels_above_table * scale - 4
                 else:
                     lx = (px / fw) * COURT_W
                     ly = (1 - py / fh) * TABLE_H * 2
@@ -58,7 +60,7 @@ class BallTracker3D:
         length_from_top, width_from_top = _to_table_coords(
             x_top, y_top, table_top, w_top, h_top, 'top')
         length_from_side, height = _to_table_coords(
-            x_side, y_side, table_side, w_side, h_side, 'side')
+            x_side, y_side, table_side, w_side, h_side, 'side', surface_row=surface_row_side)
 
         x_final = (length_from_top + length_from_side) / 2
 
@@ -98,16 +100,10 @@ class BallTracker3D:
 
     def get_trajectory_3d(self):
         if self.trajectory_3d:
-            zs = [p['Z'] for p in self.trajectory_3d]
-            min_z = min(zs)
-            shift = TABLE_H - min_z
-            if abs(shift) > 2:
-                for p in self.trajectory_3d:
-                    p['Z'] = round(p['Z'] + shift, 1)
             pts = self.trajectory_3d
-            xs = self._smooth_series([p['X'] for p in pts])
-            ys = self._smooth_series([p['Y'] for p in pts])
-            zs = self._smooth_series([p['Z'] for p in pts])
+            xs = self._smooth_series([p['X'] for p in pts], window=1)
+            ys = self._smooth_series([p['Y'] for p in pts], window=1)
+            zs = self._smooth_series([p['Z'] for p in pts], window=1)
             result = []
             for i, p in enumerate(pts):
                 result.append({

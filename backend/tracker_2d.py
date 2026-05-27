@@ -18,21 +18,6 @@ class BallTracker2D:
                 if frame_height and y > frame_height - self.ignore_bottom:
                     continue
 
-                if self.trajectory:
-                    last_x, last_y = self.trajectory[-1]
-                    dist = ((x - last_x)**2 + (y - last_y)**2)**0.5
-
-                    max_dist = 200
-                    if len(self.trajectory) >= 2:
-                        prev_x, prev_y = self.trajectory[-2]
-                        vel_x = last_x - prev_x
-                        vel_y = last_y - prev_y
-                        prev_speed = (vel_x**2 + vel_y**2)**0.5
-                        max_dist = prev_speed * 3 + 80
-
-                    if dist > max_dist:
-                        continue
-
                 self.trajectory.append((x, y))
 
             if len(self.trajectory) > 500:

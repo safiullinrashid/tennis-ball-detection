@@ -480,26 +480,22 @@ function initScene3d(points) {
         scene3d.add(new THREE.Line(g, netLineMat));
     }
 
-    // Траектория
+    // Траектория — полная, показываем только хвост через setDrawRange
     if (points.length > 1) {
         const pts = points.map(p => new THREE.Vector3(p.X, p.Z - 76 + 4, 152.5 - p.Y));
         const trajGeo = new THREE.BufferGeometry().setFromPoints(pts);
-        trajGeo.setAttribute('color', new THREE.Float32BufferAttribute(
-            points.map((_, i) => {
-                const t = i / points.length;
-                return [t, 1 - t, 0];
-            }).flat(), 3
-        ));
-        const trajMat = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 2 });
+        trajGeo.setDrawRange(0, 1);
+        const trajMat = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2 });
         trajectoryLine = new THREE.Line(trajGeo, trajMat);
         scene3d.add(trajectoryLine);
     }
 
-    // Точки траектории
+    // Точки траектории — хвост
     if (points.length > 0) {
         const dotGeo = new THREE.BufferGeometry();
         const positions = points.map(p => [p.X, p.Z - 76 + 4, 152.5 - p.Y]).flat();
         dotGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        dotGeo.setDrawRange(0, 1);
         const dotMat = new THREE.PointsMaterial({
             color: 0xffaa00,
             size: 3,
@@ -599,6 +595,12 @@ function updateBallPosition(idx) {
     ballMesh.position.set(p.X, p.Z - 76 + 4, 152.5 - p.Y);
     document.getElementById('scrubber3d').value = idx;
     document.getElementById('frameInfo3d').textContent = `${idx + 1}/${points3d.length}`;
+
+    const tailSize = 30;
+    const start = Math.max(0, idx - tailSize);
+    const count = idx - start + 1;
+    if (trajectoryLine) trajectoryLine.geometry.setDrawRange(start, count);
+    if (trailDots) trailDots.geometry.setDrawRange(start, count);
 }
 
 function draw2dTrackOnCanvas(canvas, points, color) {

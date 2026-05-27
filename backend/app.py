@@ -1,8 +1,8 @@
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
-from backend.model import TennisBallDetector, TableDetector, TABLE_H, COURT_W, COURT_H, NET_H
-from backend.tracker_2d import BallTracker2D
-from backend.tracker_3d import BallTracker3D
+from model import TennisBallDetector, TableDetector, TABLE_H, COURT_W, COURT_H, NET_H
+from tracker_2d import BallTracker2D
+from tracker_3d import BallTracker3D
 import io
 import tempfile
 import os
@@ -413,15 +413,31 @@ def track_3d():
                     frame = cv2.resize(frame, (w, h))
                 n += 1
                 if n == 1:
-                    table_bounds = table_detector.detect_bounds(frame)
+                    cam_type = 'side' if label == 'боковая' else 'top'
+                    table_bounds = table_detector.detect_bounds(frame, camera=cam_type)
                     if table_bounds:
                         print(f"  {label}: bounds стола {table_bounds} (frame={w}x{h})")
+                        vis = frame.copy()
+                        bx, by = table_bounds[0], table_bounds[1]
+                        bw_, bh_ = table_bounds[2], table_bounds[3]
+                        cv2.rectangle(vis, (int(bx), int(by)), (int(bx + bw_), int(by + bh_)), (0, 255, 0), 4)
+                        cv2.putText(vis, f"table ({cam_type})", (bx, max(30, by - 10)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
+                        vis_path = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_{label}_table.png')
+                        cv2.imwrite(vis_path, vis)
+                        print(f"  {label}: сохранена визуализация стола → {vis_path}")
                     else:
                         print(f"  {label}: стол не найден, используется весь кадр")
                     if label == 'боковая':
                         surface_row = table_detector.detect_surface_row(frame)
                         if surface_row is not None:
                             print(f"  {label}: поверхность стола на строке {surface_row}")
+                            vis = frame.copy()
+                            cv2.line(vis, (0, surface_row), (w, surface_row), (0, 255, 255), 3)
+                            cv2.putText(vis, f"surface row {surface_row}", (20, max(30, surface_row - 10)),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 3)
+                            srf_path = os.path.join(TRACKED_VIDEO_DIR, f'table_{vid_id}_side_surface.png')
+                            cv2.imwrite(srf_path, vis)
                         else:
                             print(f"  {label}: поверхность стола не найдена")
                 d = local_detector.detect_video_frame(frame)
@@ -454,17 +470,54 @@ def track_3d():
         side_out = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_side.mp4')
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            fut_top = executor.submit(process_camera, temp_top.name, top_out, top_w, top_h, top_fps, 'верхняя', 30, render_video)
-            fut_side = executor.submit(process_camera, temp_side.name, side_out, side_w, side_h, side_fps, 'боковая', 30, render_video)
-            top_dets, top_table, _ = fut_top.result()
-            side_dets, side_table, _ = fut_side.result()
+            fut_top = executor.submit(process_camera, temp_top.name, top_out, top_w, top_h, top_fps, 'верхняя', 300, render_video)
+            fut_side = executor.submit(process_camera, temp_side.name, side_out, side_w, side_h, side_fps, 'боковая', 300, render_video)
+            top_dets, top_table, top_surface = fut_top.result()
+            side_dets, side_table, side_surface = fut_side.result()
 
         top_video_ok = os.path.exists(top_out) and os.path.getsize(top_out) > 0
         side_video_ok = os.path.exists(side_out) and os.path.getsize(side_out) > 0
 
+        # Визуализация стола на первом кадре (до удаления temp)
+        top_table_vis = os.path.join(TRACKED_VIDEO_DIR, f'table_{vid_id}_top.png')
+        side_table_vis = os.path.join(TRACKED_VIDEO_DIR, f'table_{vid_id}_side.png')
+        side_surface_vis = os.path.join(TRACKED_VIDEO_DIR, f'table_{vid_id}_side_surface.png')
+        for cap_path, out_path, bounds, surf_row, label in [
+            (temp_top.name, top_table_vis, top_table, None, 'top'),
+            (temp_side.name, side_table_vis, side_table, side_surface, 'side'),
+        ]:
+            if bounds is not None and os.path.exists(cap_path):
+                cap_v = cv2.VideoCapture(cap_path)
+                ret, fr = cap_v.read()
+                cap_v.release()
+                if ret:
+                    if len(bounds) == 6:
+                        bx, by, bw_, bh_, slope, intercept = bounds
+                    else:
+                        bx, by, bw_, bh_ = bounds
+                        slope, intercept = 0, by + bh_
+                    cv2.rectangle(fr, (int(bx), int(by)), (int(bx + bw_), int(by + bh_)), (0, 255, 0), 2)
+                    if abs(slope) > 0.001:
+                        x_left, x_right = 0, fr.shape[1] - 1
+                        y_left = int(slope * x_left + intercept)
+                        y_right = int(slope * x_right + intercept)
+                        cv2.line(fr, (x_left, y_left), (x_right, y_right), (0, 255, 0), 4)
+                    else:
+                        cv2.line(fr, (int(bx), int(by + bh_ // 2)), (int(bx + bw_), int(by + bh_ // 2)), (0, 255, 0), 4)
+                    cv2.putText(fr, f"table {label}", (int(bx), max(30, int(by) - 10)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
+                    if surf_row is not None:
+                        cv2.line(fr, (0, int(surf_row)), (fr.shape[1], int(surf_row)), (0, 255, 255), 3)
+                        cv2.putText(fr, f"surface row {surf_row}", (20, max(30, int(surf_row) - 10)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 3)
+                    cv2.imwrite(out_path, fr)
+                    print(f"  Визуализация стола сохранена: {out_path}")
+
         os.unlink(temp_top.name)
         os.unlink(temp_side.name)
 
+        print(f"  ВЕРХ: {top_total} кадров, {top_fps} FPS")
+        print(f"  БОК:  {side_total} кадров, {side_fps} FPS")
         print(f"  Размеры кадров: верх {top_w}x{top_h}, бок {side_w}x{side_h}")
         print(f"  Всего детекций: верх {len(top_dets)}, бок {len(side_dets)}")
 
@@ -500,7 +553,8 @@ def track_3d():
                 [{'center': top_dets[tf], 'confidence': 0.5}],
                 [{'center': side_dets[sf], 'confidence': 0.5}],
                 (top_h, top_w), (side_h, side_w),
-                table_top=top_table, table_side=side_table
+                table_top=top_table, table_side=side_table,
+                surface_row_side=side_surface
             )
             top_2d.append({"frame": avg_frame, "x": round(top_dets[tf][0], 1), "y": round(top_dets[tf][1], 1)})
             side_2d.append({"frame": avg_frame, "x": round(side_dets[sf][0], 1), "y": round(side_dets[sf][1], 1)})
@@ -522,11 +576,11 @@ def track_3d():
             print(f"  3D точка (середина): кадр {mid['frame']} → X={mid['X']} Y={mid['Y']} Z={mid['Z']}")
 
         # Конвертируем пиксельные координаты → координаты стола (см) для PNG
-        def to_table_pts(pts, bounds, fw, fh, camera):
+        def to_table_pts(pts, bounds, fw, fh, camera, surface_row=None):
             result = []
             for p in pts:
                 lx, ly = table_detector.pixel_to_table(
-                    p['x'], p['y'], bounds, fh, fw, camera)
+                    p['x'], p['y'], bounds, fh, fw, camera, surface_row=surface_row)
                 result.append({"frame": p['frame'], "x": round(lx, 1), "y": round(ly, 1)})
             return result
 
@@ -546,7 +600,7 @@ def track_3d():
             return [{"frame": p['frame'], "x": round(sx[i], 1), "y": round(sy[i], 1)} for i, p in enumerate(pts)]
 
         top_table_coords = smooth_pts(to_table_pts(top_2d, top_table, top_w, top_h, 'top'))
-        side_table_coords = smooth_pts(to_table_pts(side_2d, side_table, side_w, side_h, 'side'))
+        side_table_coords = smooth_pts(to_table_pts(side_2d, side_table, side_w, side_h, 'side', surface_row=side_surface))
         if top_table_coords:
             tx_s = [p['x'] for p in top_table_coords]
             ty_s = [p['y'] for p in top_table_coords]
@@ -555,13 +609,6 @@ def track_3d():
             sx_s = [p['x'] for p in side_table_coords]
             sy_s = [p['y'] for p in side_table_coords]
             print(f"  PNG бок: X={min(sx_s):.0f}–{max(sx_s):.0f} Y={min(sy_s):.0f}–{max(sy_s):.0f} ({len(side_table_coords)} точек)")
-            # Сдвиг высоты — так же, как в tracker_3d.get_trajectory_3d
-            min_y_side = min(sy_s)
-            side_shift = TABLE_H - min_y_side
-            if abs(side_shift) > 2:
-                for p in side_table_coords:
-                    p['y'] = round(p['y'] + side_shift, 1)
-                print(f"  PNG бок сдвиг Y: min={min_y_side:.0f} → shift={side_shift:.0f}")
 
         # Генерируем изображения траекторий на фоне стола
         top_png = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_top_traj.png')
@@ -583,6 +630,9 @@ def track_3d():
             "side_video_url": f'/api/track/video/{vid_id}_side.mp4' if side_video_ok else None,
             "top_traj_url": f'/api/track/video/{vid_id}_top_traj.png',
             "side_traj_url": f'/api/track/video/{vid_id}_side_traj.png',
+            "top_table_vis_url": f'/api/track/video/table_{vid_id}_top.png' if os.path.exists(top_table_vis) else None,
+            "side_table_vis_url": f'/api/track/video/table_{vid_id}_side.png' if os.path.exists(side_table_vis) else None,
+            "side_surface_vis_url": f'/api/track/video/table_{vid_id}_side_surface.png' if os.path.exists(side_surface_vis) else None,
         })
     except Exception as e:
         print(f"Ошибка 3D: {e}")
