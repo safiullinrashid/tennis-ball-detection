@@ -1,14 +1,11 @@
 import os
 import sys
 
-# Добавляем пути
 sys.path.insert(0, os.path.dirname(__file__))
 
-# Запускаем Flask приложение
 from backend.app import app
 
 if __name__ == '__main__':
-    print("Запуск Tennis Ball Detection Server...")
-    print("Сервер запущен на http://localhost:5000")
-    print("Откройте frontend/index.html в браузере")
+    print("Tennis Ball Detection Server starting on http://localhost:5000")
+    print("Open frontend/index.html in a browser")
     app.run(debug=True, host='0.0.0.0', port=5000)

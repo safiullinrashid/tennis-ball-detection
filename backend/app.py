@@ -28,8 +28,6 @@ table_detector = TableDetector()
 
 
 def _find_flash_frame(video_path, max_frames=2000):
-    """Ищет кадр со вспышкой — самый яркий кадр, значительно ярче соседей.
-    Возвращает 0-индексный номер кадра или None."""
     cap = cv2.VideoCapture(video_path)
     brightness = []
     n = 0
@@ -52,7 +50,7 @@ def _find_flash_frame(video_path, max_frames=2000):
     local_avg = float(np.mean(local))
     if val < local_avg * 1.15:
         return None
-    print(f"  Вспышка: кадр {idx}, яркость={val:.0f}, фон={local_avg:.0f}")
+    print(f"  Flash: frame {idx}, brightness={val:.0f}, bg={local_avg:.0f}")
     return idx
 
 @app.route('/api/health', methods=['GET'])
@@ -107,10 +105,6 @@ def detect_stream():
         return jsonify({"error": str(e)}), 500
 
 def _draw_trajectory_png(points, output_path, bgr_color, is_side=False):
-    """Рисует траекторию на фоне стола с автоподбором масштаба.
-    points: список {frame, x, y} — координаты в см.
-    Разрывы >5 кадров = новая линия.
-    """
     if not points or len(points) < 2:
         img = np.zeros((400, 800, 3), dtype=np.uint8)
         cv2.imencode('.png', img)[1].tofile(output_path)
@@ -152,7 +146,6 @@ def _draw_trajectory_png(points, output_path, bgr_color, is_side=False):
     tx, ty = pad, pad
     tw, th = img_w - pad * 2, img_h - pad * 2
 
-    # Рисуем стол
     def table_to_img(tx, ty, tw, th, val, min_v, max_v, horiz=True):
         if horiz:
             return int(tx + (val - min_v) / (max_v - min_v) * tw)
@@ -162,7 +155,6 @@ def _draw_trajectory_png(points, output_path, bgr_color, is_side=False):
     t_right = table_to_img(tx, ty, tw, th, COURT_W, min_x, max_x, True)
 
     if is_side:
-        # Тонкая линия стола (2 px)
         ts_y = table_to_img(tx, ty, tw, th, TABLE_H, min_y, max_y, False)
         cv2.line(img, (t_left, ts_y), (t_right, ts_y), (0, 180, 0), 2)
         cv2.line(img, (t_left, ts_y + 1), (t_right, ts_y + 1), (0, 100, 0), 1)
@@ -170,11 +162,9 @@ def _draw_trajectory_png(points, output_path, bgr_color, is_side=False):
         net_top = table_to_img(tx, ty, tw, th, TABLE_H + NET_H, min_y, max_y, False)
         net_bot = table_to_img(tx, ty, tw, th, TABLE_H, min_y, max_y, False)
         cv2.line(img, (net_x, net_top), (net_x, net_bot), (100, 100, 100), 2)
-        # Верхняя перекладина сетки — показывает, что сетка идёт в глубину (по ширине стола)
         net_left = table_to_img(tx, ty, tw, th, COURT_W * 0.5 - 40, min_x, max_x, True)
         net_right = table_to_img(tx, ty, tw, th, COURT_W * 0.5 + 40, min_x, max_x, True)
         cv2.line(img, (net_left, net_top), (net_right, net_top), (120, 120, 120), 1)
-        # Пол
         fl_y = table_to_img(tx, ty, tw, th, 0, min_y, max_y, False)
         if ty < fl_y < ty + th:
             cv2.line(img, (t_left, fl_y), (t_right, fl_y), (40, 40, 40), 1)
@@ -214,7 +204,6 @@ def _draw_trajectory_png(points, output_path, bgr_color, is_side=False):
 def _write_video(frames, output_path, fps, width, height):
     if not frames:
         return True
-    # imageio (с FFmpeg, если установлен) — лучший вариант
     if HAS_IMAGEIO:
         try:
             writer = imageio.get_writer(output_path, fps=fps, codec='libx264')
@@ -225,7 +214,6 @@ def _write_video(frames, output_path, fps, width, height):
         except Exception as e:
             print(f"imageio libx264 не сработал: {e}")
             try:
-                # без указания codec — использует внутренний кодировщик imageio
                 writer = imageio.get_writer(output_path, fps=fps)
                 for f in frames:
                     writer.append_data(cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
@@ -233,7 +221,6 @@ def _write_video(frames, output_path, fps, width, height):
                 return True
             except Exception as e2:
                 print(f"imageio fallback не сработал: {e2}")
-    # OpenCV — последний шанс
     for codec in ['mp4v', 'avc1', 'X264', 'H264', 'MJPG']:
         try:
             writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*codec), fps, (width, height))
@@ -270,7 +257,7 @@ def track_2d():
         trajectory = []
         all_frames = []
 
-        print(f"Обработка {total_frames} кадров, {width}x{height}")
+        print(f"Processing {total_frames} frames, {width}x{height}")
 
         while True:
             ret, frame = cap.read()
@@ -295,7 +282,7 @@ def track_2d():
             all_frames.append(frame)
 
             if frame_num % 30 == 0:
-                print(f"Кадр {frame_num}: {len(detections)} мячей (всего {total_detections})")
+                print(f"Frame {frame_num}: {len(detections)} balls (total {total_detections})")
 
         cap.release()
         os.unlink(temp_input.name)
@@ -304,11 +291,10 @@ def track_2d():
         temp_output.close()
         ok = _write_video(all_frames, temp_output.name, fps, width, height)
 
-        print(f"Готово: {frame_num} кадров, {total_detections} детекций, {len(trajectory)} точек траектории, видео: {'✓' if ok else '✗'}")
+        print(f"Done: {frame_num} frames, {total_detections} detections, {len(trajectory)} trajectory points, video: {'OK' if ok else 'FAIL'}")
 
         if not ok:
             os.unlink(temp_output.name)
-            # Возвращаем JSON с траекторией — фронтенд нарисует через canvas
             return jsonify({
                 "success": True,
                 "video_ok": False,
@@ -355,7 +341,7 @@ def calibrate_get_frame():
         ret, frame = cap.read()
         cap.release()
         if not ret:
-            return jsonify({"error": "Не могу прочитать видео"}), 500
+            return jsonify({"error": "Cannot read video"}), 500
         frame_name = f'calib_{camera}_{uuid.uuid4().hex}.jpg'
         frame_path = os.path.join(TRACKED_VIDEO_DIR, frame_name)
         cv2.imwrite(frame_path, frame)
@@ -374,7 +360,7 @@ def calibrate_save_corners():
                 if os.path.exists(calibration_temp[camera][f]):
                     os.unlink(calibration_temp[camera][f])
             del calibration_temp[camera]
-        return jsonify({"success": True, "message": f"Калибровка {camera} сохранена"})
+        return jsonify({"success": True, "message": f"Calibration {camera} saved"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -382,10 +368,9 @@ def calibrate_save_corners():
 def serve_tracked_video(filename):
     filepath = os.path.join(TRACKED_VIDEO_DIR, filename)
     if not os.path.exists(filepath):
-        print(f"404: {filepath} не найден (папка: {TRACKED_VIDEO_DIR})")
-        # список файлов в папке для диагностики
+        print(f"404: {filepath} not found (dir: {TRACKED_VIDEO_DIR})")
         files = os.listdir(TRACKED_VIDEO_DIR) if os.path.isdir(TRACKED_VIDEO_DIR) else []
-        print(f"  Файлы в папке: {files}")
+        print(f"  Files: {files}")
     return send_from_directory(TRACKED_VIDEO_DIR, filename)
 
 @app.route('/api/track/3d', methods=['POST'])
@@ -405,7 +390,6 @@ def track_3d():
         temp_side.write(file_side.read())
         temp_side.close()
 
-        # Параметры верхней камеры
         cap = cv2.VideoCapture(temp_top.name)
         top_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) // 2 * 2
         top_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) // 2 * 2
@@ -413,7 +397,6 @@ def track_3d():
         top_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap.release()
 
-        # Параметры боковой камеры
         cap = cv2.VideoCapture(temp_side.name)
         side_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) // 2 * 2
         side_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) // 2 * 2
@@ -421,17 +404,16 @@ def track_3d():
         side_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap.release()
 
-        # Синхронизация по вспышке — начинаем детекцию с кадра вспышки
         flash_top = _find_flash_frame(temp_top.name)
         flash_side = _find_flash_frame(temp_side.name)
         if flash_top is not None:
-            print(f"  Верх: кадр вспышки {flash_top}")
+            print(f"  Top: flash frame {flash_top}")
         if flash_side is not None:
-            print(f"  Бок: кадр вспышки {flash_side}")
+            print(f"  Side: flash frame {flash_side}")
 
         def process_camera(path, out_path, w, h, fps, label, flash_frame=None, max_miss=0, render=True):
             cap_ = cv2.VideoCapture(path)
-            local_detector = TennisBallDetector()  # отдельный экземпляр для каждого потока
+            local_detector = TennisBallDetector()
             tracker_ = BallTracker2D(ignore_bottom=0)
             dets_ = {}
             all_frames = []
@@ -445,8 +427,8 @@ def track_3d():
             if flash_frame is not None and flash_frame < total:
                 cap_.set(cv2.CAP_PROP_POS_FRAMES, flash_frame)
                 n = flash_frame
-                print(f"  {label}: начинаем с кадра {flash_frame} (вспышка)")
-            print(f"Обработка {label}: {total} кадров, {w}x{h}, fps={fps}")
+                print(f"  {label}: start at frame {flash_frame} (flash)")
+            print(f"Processing {label}: {total} frames, {w}x{h}, fps={fps}")
             while True:
                 ret, frame = cap_.read()
                 if not ret:
@@ -456,10 +438,10 @@ def track_3d():
                 n += 1
                 if n == 1 or first_frame:
                     first_frame = False
-                    cam_type = 'side' if label == 'боковая' else 'top'
+                    cam_type = 'side' if label == 'side' else 'top'
                     table_bounds = table_detector.detect_bounds(frame, camera=cam_type)
                     if table_bounds:
-                        print(f"  {label}: bounds стола {table_bounds} (frame={w}x{h})")
+                        print(f"  {label}: table bounds {table_bounds} (frame={w}x{h})")
                         vis = frame.copy()
                         bx, by = table_bounds[0], table_bounds[1]
                         bw_, bh_ = table_bounds[2], table_bounds[3]
@@ -468,13 +450,13 @@ def track_3d():
                                     cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
                         vis_path = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_{label}_table.png')
                         cv2.imwrite(vis_path, vis)
-                        print(f"  {label}: сохранена визуализация стола → {vis_path}")
+                        print(f"  {label}: table viz saved → {vis_path}")
                     else:
-                        print(f"  {label}: стол не найден, используется весь кадр")
-                    if label == 'боковая':
+                        print(f"  {label}: table not found, using full frame")
+                    if label == 'side':
                         surface_row = table_detector.detect_surface_row(frame)
                         if surface_row is not None:
-                            print(f"  {label}: поверхность стола на строке {surface_row}")
+                            print(f"  {label}: surface at row {surface_row}")
                             vis = frame.copy()
                             cv2.line(vis, (0, surface_row), (w, surface_row), (0, 255, 255), 3)
                             cv2.putText(vis, f"surface row {surface_row}", (20, max(30, surface_row - 10)),
@@ -482,7 +464,7 @@ def track_3d():
                             srf_path = os.path.join(TRACKED_VIDEO_DIR, f'table_{vid_id}_side_surface.png')
                             cv2.imwrite(srf_path, vis)
                         else:
-                            print(f"  {label}: поверхность стола не найдена")
+                            print(f"  {label}: surface row not found")
                 d = local_detector.detect_video_frame(frame)
                 tracker_.update(d, h)
                 if d:
@@ -496,26 +478,26 @@ def track_3d():
                     frame = tracker_.draw_trajectory(frame, (0, 255, 255), 2)
                     all_frames.append(frame)
                 if max_miss and had_any and miss > max_miss and (n - (flash_frame or 0)) > total * 0.2:
-                    print(f"  {label}: мяч потерян на {miss} кадров, прерываем (кадр {n}/{total})")
+                    print(f"  {label}: ball lost for {miss} frames, stopping (frame {n}/{total})")
                     break
                 if n % 60 == 0:
-                    print(f"  {label}: кадр {n}")
+                    print(f"  {label}: frame {n}")
             cap_.release()
             ok = True
             if render:
                 ok = _write_video(all_frames, out_path, fps, w, h)
-            print(f"  {label}: {len(dets_)} детекций, видео {'✓' if ok else '✗'}")
+            print(f"  {label}: {len(dets_)} detections, video {'OK' if ok else 'FAIL'}")
             for i, (fn, (dx, dy)) in enumerate(sorted(dets_.items())[:3]):
-                print(f"  {label} детекция #{i+1}: кадр {fn} → px=({dx:.0f}, {dy:.0f})")
+                print(f"  {label} detection #{i+1}: frame {fn} → px=({dx:.0f}, {dy:.0f})")
             return dets_, table_bounds, surface_row
 
         top_out = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_top.mp4')
         side_out = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_side.mp4')
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            fut_top = executor.submit(process_camera, temp_top.name, top_out, top_w, top_h, top_fps, 'верхняя',
+            fut_top = executor.submit(process_camera, temp_top.name, top_out, top_w, top_h, top_fps, 'top',
                                       flash_frame=flash_top, max_miss=300, render=render_video)
-            fut_side = executor.submit(process_camera, temp_side.name, side_out, side_w, side_h, side_fps, 'боковая',
+            fut_side = executor.submit(process_camera, temp_side.name, side_out, side_w, side_h, side_fps, 'side',
                                        flash_frame=flash_side, max_miss=300, render=render_video)
             top_dets, top_table, top_surface = fut_top.result()
             side_dets, side_table, side_surface = fut_side.result()
@@ -556,17 +538,17 @@ def track_3d():
                         cv2.putText(fr, f"surface row {surf_row}", (20, max(30, int(surf_row) - 10)),
                                     cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 3)
                     cv2.imwrite(out_path, fr)
-                    print(f"  Визуализация стола сохранена: {out_path}")
+                    print(f"  Table visualization saved: {out_path}")
 
         os.unlink(temp_top.name)
         os.unlink(temp_side.name)
 
-        print(f"  ВЕРХ: {top_total} кадров, {top_fps} FPS")
-        print(f"  БОК:  {side_total} кадров, {side_fps} FPS")
-        print(f"  Размеры кадров: верх {top_w}x{top_h}, бок {side_w}x{side_h}")
-        print(f"  Всего детекций: верх {len(top_dets)}, бок {len(side_dets)}")
+        print(f"  TOP: {top_total} frames, {top_fps} FPS")
+        print(f"  SIDE: {side_total} frames, {side_fps} FPS")
+        print(f"  Frame sizes: top {top_w}x{top_h}, side {side_w}x{side_h}")
+        print(f"  Detections: top {len(top_dets)}, side {len(side_dets)}")
 
-        print("Сборка 3D траектории...")
+        print("Building 3D trajectory...")
         tracker3d = BallTracker3D()
         fps_ratio = side_fps / top_fps if top_fps > 0 else 1.0
         side_keys = sorted(side_dets.keys())
@@ -603,22 +585,20 @@ def track_3d():
             side_2d.append({"frame": avg_frame, "x": round(side_dets[sf][0], 1), "y": round(side_dets[sf][1], 1)})
 
         trajectory = tracker3d.get_trajectory_3d()
-        print(f"3D готово. Точек: {len(trajectory)} (совпадений: {len(matched_pairs)})")
+        print(f"3D ready. Points: {len(trajectory)} (matches: {len(matched_pairs)})")
         if trajectory:
             xs = [p['X'] for p in trajectory]
             ys = [p['Y'] for p in trajectory]
             zs = [p['Z'] for p in trajectory]
-            print(f"  3D X: {min(xs):.0f}–{max(xs):.0f} см (0–274)")
-            print(f"  3D Y: {min(ys):.0f}–{max(ys):.0f} см (0–152.5)")
-            print(f"  3D Z: {min(zs):.0f}–{max(zs):.0f} см (0–106.5)")
-            # Первые 3 точки
+            print(f"  3D X: {min(xs):.0f}–{max(xs):.0f} cm (0–274)")
+            print(f"  3D Y: {min(ys):.0f}–{max(ys):.0f} cm (0–152.5)")
+            print(f"  3D Z: {min(zs):.0f}–{max(zs):.0f} cm (0–106.5)")
             for i, p in enumerate(trajectory[:3]):
-                print(f"  3D точка #{i+1}: кадр {p['frame']} → X={p['X']} Y={p['Y']} Z={p['Z']}")
-            # Одна точка в середине
+                print(f"  3D point #{i+1}: frame {p['frame']} → X={p['X']} Y={p['Y']} Z={p['Z']}")
             mid = trajectory[len(trajectory)//2]
-            print(f"  3D точка (середина): кадр {mid['frame']} → X={mid['X']} Y={mid['Y']} Z={mid['Z']}")
+            print(f"  3D point (mid): frame {mid['frame']} → X={mid['X']} Y={mid['Y']} Z={mid['Z']}")
 
-        # Конвертируем пиксельные координаты → координаты стола (см) для PNG
+
         def to_table_pts(pts, bounds, fw, fh, camera, surface_row=None):
             result = []
             for p in pts:
@@ -647,13 +627,13 @@ def track_3d():
         if top_table_coords:
             tx_s = [p['x'] for p in top_table_coords]
             ty_s = [p['y'] for p in top_table_coords]
-            print(f"  PNG верх: X={min(tx_s):.0f}–{max(tx_s):.0f} Y={min(ty_s):.0f}–{max(ty_s):.0f} ({len(top_table_coords)} точек)")
+            print(f"  PNG top: X={min(tx_s):.0f}–{max(tx_s):.0f} Y={min(ty_s):.0f}–{max(ty_s):.0f} ({len(top_table_coords)} pts)")
         if side_table_coords:
             sx_s = [p['x'] for p in side_table_coords]
             sy_s = [p['y'] for p in side_table_coords]
-            print(f"  PNG бок: X={min(sx_s):.0f}–{max(sx_s):.0f} Y={min(sy_s):.0f}–{max(sy_s):.0f} ({len(side_table_coords)} точек)")
+            print(f"  PNG side: X={min(sx_s):.0f}–{max(sx_s):.0f} Y={min(sy_s):.0f}–{max(sy_s):.0f} ({len(side_table_coords)} pts)")
 
-        # Генерируем изображения траекторий на фоне стола
+
         top_png = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_top_traj.png')
         side_png = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}_side_traj.png')
         _draw_trajectory_png(top_table_coords, top_png, (255, 212, 0), is_side=False)
@@ -678,7 +658,7 @@ def track_3d():
             "side_surface_vis_url": f'/api/track/video/table_{vid_id}_side_surface.png' if os.path.exists(side_surface_vis) else None,
         })
     except Exception as e:
-        print(f"Ошибка 3D: {e}")
+        print(f"3D error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500

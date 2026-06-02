@@ -1,13 +1,13 @@
 import subprocess, sys, os
 
-print("Установка imageio-ffmpeg...")
+print("Installing imageio-ffmpeg...")
 result = subprocess.run(
     [sys.executable, "-m", "pip", "install", "imageio-ffmpeg"],
     capture_output=True, text=True
 )
 print(result.stdout)
 if result.returncode == 0:
-    print("Готово! Перезапустите сервер.")
+    print("Done! Restart the server.")
 else:
-    print("Ошибка:", result.stderr)
-    print("\nПопробуйте вручную: python -m pip install imageio-ffmpeg")
+    print("Error:", result.stderr)
+    print("\nTry manually: python -m pip install imageio-ffmpeg")

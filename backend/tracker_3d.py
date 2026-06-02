@@ -93,7 +93,6 @@ class BallTracker3D:
             [values[-1]] * (window // 2)
         ])
         smoothed = np.convolve(padded, kernel, mode='valid')
-        # сохраняем первую и последнюю точку острыми (не сглаженными)
         smoothed[0] = values[0]
         smoothed[-1] = values[-1]
         return smoothed.tolist()

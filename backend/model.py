@@ -62,7 +62,7 @@ class TableDetector:
                 frame_area = frame.shape[0] * frame.shape[1]
                 if area >= frame_area * 0.03:
                     rect = cv2.boundingRect(largest)
-                    print(f"  top: синяя маска rect={rect}, area={area/frame_area:.1%}")
+                    print(f"  top: blue mask rect={rect}, area={area/frame_area:.1%}")
                     return rect
             return None
 
