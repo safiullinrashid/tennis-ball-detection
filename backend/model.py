@@ -24,7 +24,7 @@ class TennisBallDetector:
         mask = cv2.inRange(hsv, np.array([5, 80, 80]), np.array([20, 255, 255]))
         filtered = cv2.bitwise_and(frame, frame, mask=mask)
 
-        results = self.model(filtered, conf=0.2, iou=0.3, augment=False, verbose=False, max_det=5)
+        results = self.model(filtered, conf=0.5, iou=0.3, augment=False, verbose=False, max_det=1)
 
         detections = []
         if len(results[0].boxes) > 0:
