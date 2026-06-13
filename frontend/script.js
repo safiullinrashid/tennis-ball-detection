@@ -397,6 +397,7 @@ function initScene3d(points) {
             <span style="color:#888;font-size:11px;">скорость</span>
             <input type="range" id="speed3d" min="1" max="20" value="15" step="1" style="width:80px;accent-color:#ff8800;" oninput="document.getElementById('speedVal3d').textContent=this.value">
             <span id="speedVal3d" style="color:#ff8800;font-size:12px;min-width:18px;">15</span>
+            <button id="fullscreenBtn3d" style="background: none; border: none; color: #fff; cursor: pointer; font-size: 16px;">⛶</button>
         </div>`;
         renderer3d = null;
     }
@@ -482,7 +483,7 @@ function initScene3d(points) {
 
     // Траектория — полная, показываем только хвост через setDrawRange
     if (points.length > 1) {
-        const pts = points.map(p => new THREE.Vector3(p.X, p.Z - 76 + 4, 152.5 - p.Y));
+        const pts = points.map(p => new THREE.Vector3(p.X, p.Z - 76, 152.5 - p.Y));
         const trajGeo = new THREE.BufferGeometry().setFromPoints(pts);
         trajGeo.setDrawRange(0, 1);
         const trajMat = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2 });
@@ -493,7 +494,7 @@ function initScene3d(points) {
     // Точки траектории — хвост
     if (points.length > 0) {
         const dotGeo = new THREE.BufferGeometry();
-        const positions = points.map(p => [p.X, p.Z - 76 + 4, 152.5 - p.Y]).flat();
+        const positions = points.map(p => [p.X, p.Z - 76, 152.5 - p.Y]).flat();
         dotGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
         dotGeo.setDrawRange(0, 1);
         const dotMat = new THREE.PointsMaterial({
@@ -546,6 +547,31 @@ function initScene3d(points) {
         speedCounter = 0;
     };
 
+    document.getElementById('fullscreenBtn3d').onclick = () => {
+        if (!document.fullscreenElement) {
+            container.requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    };
+
+    document.addEventListener('fullscreenchange', () => {
+        if (document.fullscreenElement === container) {
+            container.style.height = '100vh';
+            container.style.width = '100vw';
+            container.style.borderRadius = '0';
+        } else {
+            container.style.height = '480px';
+            container.style.width = '100%';
+            container.style.borderRadius = '12px';
+        }
+        const cw = container.clientWidth;
+        const ch = container.clientHeight;
+        camera3d.aspect = cw / ch;
+        camera3d.updateProjectionMatrix();
+        renderer3d.setSize(cw, ch);
+    });
+
     scrubber.oninput = () => {
         animFrame = parseInt(scrubber.value);
         updateBallPosition(animFrame);
@@ -592,7 +618,7 @@ function updateBallPosition(idx) {
     if (!ballMesh || points3d.length === 0) return;
     idx = Math.min(idx, points3d.length - 1);
     const p = points3d[idx];
-    ballMesh.position.set(p.X, p.Z - 76 + 4, 152.5 - p.Y);
+    ballMesh.position.set(p.X, p.Z - 76, 152.5 - p.Y);
     document.getElementById('scrubber3d').value = idx;
     document.getElementById('frameInfo3d').textContent = `${idx + 1}/${points3d.length}`;
 
