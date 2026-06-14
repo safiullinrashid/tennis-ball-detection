@@ -17,6 +17,9 @@ try:
 except ImportError:
     HAS_IMAGEIO = False
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
+
 app = Flask(__name__)
 CORS(app)
 
@@ -198,36 +201,40 @@ def _draw_trajectory_png(points, output_path, bgr_color, is_side=False):
 
     cv2.imencode('.png', img)[1].tofile(output_path)
 
-def _write_video(frames, output_path, fps, width, height):
+def _write_video(frames, output_path, fps, width, height, fast=False):
     if not frames:
         return True
-    if HAS_IMAGEIO:
-        try:
-            writer = imageio.get_writer(output_path, fps=fps, codec='libx264')
-            for f in frames:
-                writer.append_data(cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
-            writer.close()
-            return True
-        except Exception as e:
-            print(f"imageio libx264 не сработал: {e}")
+    if fast:
+        # Для 3D — быстро, любой кодек
+        for codec in ['mp4v', 'avc1', 'X264', 'H264', 'MJPG']:
             try:
-                writer = imageio.get_writer(output_path, fps=fps)
-                for f in frames:
-                    writer.append_data(cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
-                writer.close()
-                return True
-            except Exception as e2:
-                print(f"imageio fallback не сработал: {e2}")
-    for codec in ['mp4v', 'avc1', 'X264', 'H264', 'MJPG']:
-        try:
-            writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*codec), fps, (width, height))
-            if writer.isOpened():
-                for f in frames:
-                    writer.write(f)
-                writer.release()
-                return True
-        except:
-            pass
+                writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*codec), fps, (width, height))
+                if writer.isOpened():
+                    for f in frames:
+                        writer.write(f)
+                    writer.release()
+                    print(f"Video written with {codec} (fast)")
+                    return True
+            except:
+                pass
+        return False
+    # FFmpeg (из imageio-ffmpeg) — H.264, работает в браузере
+    try:
+        import subprocess, tempfile, shutil
+        import imageio_ffmpeg
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+        tmpdir = tempfile.mkdtemp()
+        for i, f in enumerate(frames):
+            cv2.imwrite(os.path.join(tmpdir, f'{i:06d}.jpg'), f)
+        inp = os.path.join(tmpdir, '%06d.jpg')
+        cmd = [ffmpeg_exe, '-y', '-framerate', str(fps), '-i', inp, '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p', output_path]
+        subprocess.run(cmd, capture_output=True, timeout=300)
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        if os.path.getsize(output_path) > 1000:
+            print("Video written with ffmpeg libx264")
+            return True
+    except Exception as e:
+        print(f"ffmpeg libx264 failed: {e}")
     return False
 
 @app.route('/api/track/2d', methods=['POST'])
@@ -284,14 +291,13 @@ def track_2d():
         cap.release()
         os.unlink(temp_input.name)
 
-        temp_output = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-        temp_output.close()
-        ok = _write_video(all_frames, temp_output.name, fps, width, height)
+        vid_id = str(uuid.uuid4())[:8]
+        out_path = os.path.join(TRACKED_VIDEO_DIR, f'{vid_id}.mp4')
+        ok = _write_video(all_frames, out_path, fps, width, height)
 
         print(f"Done: {frame_num} frames, {total_detections} detections, {len(trajectory)} trajectory points, video: {'OK' if ok else 'FAIL'}")
 
         if not ok:
-            os.unlink(temp_output.name)
             return jsonify({
                 "success": True,
                 "video_ok": False,
@@ -301,21 +307,15 @@ def track_2d():
                 "frame_count": frame_num
             })
 
-        response = send_file(
-            temp_output.name,
-            mimetype='video/mp4',
-            as_attachment=True,
-            download_name=f'tracked_2d_{file.filename}'
-        )
-
-        @response.call_on_close
-        def cleanup():
-            try:
-                os.unlink(temp_output.name)
-            except:
-                pass
-
-        return response
+        return jsonify({
+            "success": True,
+            "video_ok": True,
+            "video_url": f'/api/track/video/{vid_id}.mp4',
+            "detections": total_detections,
+            "trajectory": trajectory,
+            "fps": fps,
+            "frame_count": frame_num
+        })
 
     except Exception as e:
         print(f"Ошибка: {e}")
@@ -445,7 +445,7 @@ def track_3d():
             cap_.release()
             ok = True
             if render:
-                ok = _write_video(all_frames, out_path, fps, w, h)
+                ok = _write_video(all_frames, out_path, fps, w, h, fast=True)
             print(f"  {label}: {len(dets_)} detections, video {'OK' if ok else 'FAIL'}")
             for i, (fn, (dx, dy)) in enumerate(sorted(dets_.items())[:3]):
                 print(f"  {label} detection #{i+1}: frame {fn} → px=({dx:.0f}, {dy:.0f})")
@@ -622,6 +622,17 @@ def track_3d():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+@app.route('/')
+def index():
+    return send_from_directory(FRONTEND_DIR, 'index.html')
+
+@app.route('/<path:path>')
+def static_files(path):
+    fp = os.path.join(FRONTEND_DIR, path)
+    if os.path.isfile(fp):
+        return send_from_directory(FRONTEND_DIR, path)
+    return send_from_directory(FRONTEND_DIR, 'index.html')
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

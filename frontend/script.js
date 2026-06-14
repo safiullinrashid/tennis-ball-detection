@@ -180,24 +180,18 @@ async function handleVideo2dUpload(file) {
         });
 
         if (response.ok) {
-            const contentType = response.headers.get('content-type') || '';
-            if (contentType.includes('video/mp4')) {
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `tracked_2d_${file.name}`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+            const data = await response.json();
+            if (data.success && data.video_ok) {
+                const url = data.video_url;
 
                 resultImage.style.display = 'none';
                 document.getElementById('viewer3d').style.display = 'none';
                 document.getElementById('tracks3d_container').style.display = 'none';
                 document.getElementById('tracks2d_container').style.display = 'none';
 
-                resultVideo.src = url;
+                // Добавляем base URL для WSL
+                const videoFullUrl = url.startsWith('http') ? url : `http://localhost:5000${url}`;
+                resultVideo.src = videoFullUrl;
                 resultVideo.style.display = 'block';
                 resultVideo.load();
                 resultVideo.play().catch(() => {});
@@ -207,16 +201,14 @@ async function handleVideo2dUpload(file) {
                 confidence.textContent = 'Траектория';
                 if (trajectoryInfo) {
                     trajectoryInfo.style.display = 'block';
-                    trajectoryInfo.innerHTML = '📥 Видео скачано<br>🟢 Зелёные рамки — детекция мяча<br>🟡 Жёлтая линия — траектория';
+                    trajectoryInfo.innerHTML = '🟢 Зелёные рамки — детекция мяча<br>🟡 Жёлтая линия — траектория';
                 }
                 resultVideo.scrollIntoView({ behavior: 'smooth' });
-            } else {
-                const data = await response.json();
-                if (data.success && data.video_ok === false) {
-                    // JSON fallback — видео не создалось, рисуем через canvas
-                    alert('Видео не удалось создать — будет показана траектория на кадрах (без видеофайла)');
-                    resultImage.style.display = 'none';
-                    document.getElementById('viewer3d').style.display = 'none';
+            } else if (data.success && data.video_ok === false) {
+                // JSON fallback — видео не создалось, рисуем через canvas
+                alert('Видео не удалось создать — будет показана траектория на кадрах (без видеофайла)');
+                resultImage.style.display = 'none';
+                document.getElementById('viewer3d').style.display = 'none';
                     document.getElementById('tracks3d_container').style.display = 'none';
                     resultArea.style.display = 'block';
                     ballCount.textContent = data.detections || 0;
@@ -236,7 +228,6 @@ async function handleVideo2dUpload(file) {
                 } else {
                     alert('Ошибка сервера: ' + (data.error || 'неизвестная ошибка'));
                 }
-            }
         } else {
             const error = await response.json();
             alert('Ошибка: ' + error.error);
